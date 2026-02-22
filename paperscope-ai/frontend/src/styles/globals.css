@@ -1,0 +1,23 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  background: #0b0f17;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+a {
+  color: rgba(255, 255, 255, 0.95);
+  text-decoration: none;
+}
+
+a:hover {
+  opacity: 0.85;
+}

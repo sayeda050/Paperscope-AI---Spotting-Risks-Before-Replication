@@ -1,84 +1,230 @@
-.authPage {
+/* ===== Register Page Frame ===== */
+.ps-register-page {
   min-height: 100vh;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f5f7; /* Matches dashboard background */
   padding: 24px;
+  color: #0f172a;
+  font-family: inherit;
 }
 
-.authCard {
+/* ===== Card ===== */
+.ps-register-card {
   width: 100%;
   max-width: 440px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 18px;
-  padding: 22px;
+  background: #ffffff;
+  border: 1px solid #e6eaf0;
+  border-radius: 14px;
+  padding: 32px;
+  box-shadow: 0 10px 24px rgba(2, 8, 23, 0.06);
 }
 
-.authTitle {
-  font-size: 28px;
+/* ===== Header & Brand ===== */
+.ps-register-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 24px;
+  text-decoration: none;
+  color: #0f172a;
+  transition: transform 150ms ease;
+}
+
+.ps-register-brand:hover {
+  transform: translateY(-1px);
+}
+
+.ps-brand-icon {
+  color: #0f766e; /* Using the teal color from your dashboard */
+}
+
+.ps-brand-text {
+  font-size: 24px;
   font-weight: 800;
-  margin-bottom: 6px;
+  letter-spacing: 0.2px;
 }
 
-.authSub {
-  opacity: 0.8;
-  margin-bottom: 16px;
+.ps-register-header {
+  text-align: center;
+  margin-bottom: 24px;
 }
 
-.authError {
-  background: rgba(255, 0, 0, 0.12);
-  border: 1px solid rgba(255, 0, 0, 0.22);
-  padding: 10px 12px;
-  border-radius: 12px;
-  margin-bottom: 14px;
+.ps-register-title {
+  margin: 0 0 6px 0;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.ps-register-subtitle {
+  margin: 0;
+  color: rgba(15, 23, 42, 0.60);
   font-size: 14px;
 }
 
-.authForm {
+/* ===== Alerts ===== */
+.ps-register-error {
+  background: rgba(239, 68, 68, 0.14);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 18px;
+}
+
+/* ===== Form Elements ===== */
+.ps-register-form {
   display: flex;
   flex-direction: column;
+  gap: 16px;
+}
+
+.ps-register-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
-.field label {
-  display: block;
+.ps-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ps-label {
   font-size: 13px;
-  opacity: 0.85;
-  margin-bottom: 6px;
-}
-
-.field input {
-  width: 100%;
-  padding: 11px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(0, 0, 0, 0.25);
-  color: rgba(255, 255, 255, 0.92);
-  outline: none;
-}
-
-.field input:focus {
-  border-color: rgba(255, 255, 255, 0.25);
-}
-
-.authBtn {
-  margin-top: 6px;
-  padding: 12px;
-  border-radius: 12px;
   font-weight: 700;
-  border: none;
-  cursor: pointer;
-  background: rgba(255, 255, 255, 0.92);
-  color: #111;
+  color: rgba(15, 23, 42, 0.85);
 }
 
-.authBtn:disabled {
+.ps-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ps-input-icon {
+  position: absolute;
+  left: 12px;
+  color: rgba(15, 23, 42, 0.4);
+}
+
+.ps-input {
+  width: 100%;
+  height: 42px;
+  border: 1px solid #e6eaf0;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 14px;
+  padding: 0 14px;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+  box-sizing: border-box;
+}
+
+.ps-input.has-icon {
+  padding-left: 38px;
+}
+
+.ps-input:focus {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+}
+
+/* ===== Buttons ===== */
+.ps-btn {
+  height: 44px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 150ms ease;
+  border: none;
+  width: 100%;
+}
+
+.ps-btn-primary {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.ps-btn-primary:hover:not(:disabled) {
+  background: #1e293b;
+}
+
+.ps-btn:disabled {
   opacity: 0.65;
   cursor: not-allowed;
 }
 
-.authFooter {
-  margin-top: 14px;
-  font-size: 14px;
-  opacity: 0.9;
+.ps-btn-outline {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #e6eaf0;
+}
+
+.ps-btn-outline:hover:not(:disabled) {
+  background: #f6f7f9;
+}
+
+/* ===== Divider ===== */
+.ps-divider {
+  position: relative;
+  margin: 24px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ps-divider-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #e6eaf0;
+}
+
+.ps-divider-text {
+  position: relative;
+  background: #ffffff;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(15, 23, 42, 0.5);
+}
+
+/* ===== Footer ===== */
+.ps-register-footer {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(15, 23, 42, 0.65);
+}
+
+.ps-link {
+  color: #0f766e;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.ps-link:hover {
+  text-decoration: underline;
+}
+
+.ps-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }

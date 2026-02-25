@@ -26,6 +26,9 @@ urlpatterns = [
     # Django admin
     path("admin/", admin.site.urls),
 
+    # --- 1. ADDED THIS LINE TO FIX THE GOOGLE CRASH ---
+    path('accounts/', include('allauth.urls')), 
+
     # Authentication (dj-rest-auth)
     path("api/auth/", include("dj_rest_auth.urls")),
     path("api/auth/registration/", include("dj_rest_auth.registration.urls")),

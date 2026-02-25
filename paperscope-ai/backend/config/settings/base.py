@@ -1,172 +1,150 @@
-import os
 from pathlib import Path
-from dotenv import load_dotenv
+import os
+import environ
 
-# --------------------------------------------------
-# Base directory (backend/)
-# --------------------------------------------------
-BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/
+# 1. Initialize environ
+env = environ.Env()
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
-# --------------------------------------------------
-# Load environment variables from backend/.env
-# --------------------------------------------------
-load_dotenv(BASE_DIR / ".env")
-
-# --------------------------------------------------
-# Core settings
-# --------------------------------------------------
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key")
-DEBUG = os.getenv("DJANGO_DEBUG", "True") == "True"
-
+# 2. Core Security Settings
+SECRET_KEY = env('SECRET_KEY', default='dev-secret-key-change-me-later')
+DEBUG = env.bool('DJANGO_DEBUG', default=True)
 ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
-# --------------------------------------------------
-# Applications
-# --------------------------------------------------
+# 3. Application Definition
 INSTALLED_APPS = [
-    # Django core
-    "django.contrib.admin",
-    "django.contrib.auth",
-    "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
-    "django.contrib.sites",
-    "corsheaders",
-
-    # Third-party
-    "rest_framework",
-    "rest_framework.authtoken",
-    "dj_rest_auth",
-    "dj_rest_auth.registration",
-
-    "allauth",
-    "allauth.account",
-    "allauth.socialaccount",
-    "allauth.socialaccount.providers.google",
-
-    # Local apps
-    "apps.users",
-    "apps.papers",
-    "apps.analysis",
-    "apps.logs_app",
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'django.contrib.sites',
+    'corsheaders',
+    'rest_framework',
+    'rest_framework.authtoken',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
+    'apps.users',
+    'apps.papers',
+    'apps.analysis',
+    'apps.logs_app',
 ]
 
-SITE_ID = 1
-
-# --------------------------------------------------
-# Middleware (required allauth middleware included)
-# --------------------------------------------------
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",
-    "django.middleware.security.SecurityMiddleware",
-    
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-
-    "allauth.account.middleware.AccountMiddleware",
-
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = "config.urls"
+ROOT_URLCONF = 'config.urls'
+WSGI_APPLICATION = 'config.wsgi.application'
 
-WSGI_APPLICATION = "config.wsgi.application"
-ASGI_APPLICATION = "config.asgi.application"
-
-# --------------------------------------------------
-# Templates
-# --------------------------------------------------
 TEMPLATES = [
     {
-        "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
-        "APP_DIRS": True,
-        "OPTIONS": {
-            "context_processors": [
-                "django.template.context_processors.debug",
-                "django.template.context_processors.request",
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
             ],
         },
     },
 ]
 
-# --------------------------------------------------
-# Database (PostgreSQL) — uses POSTGRES_* keys only
-# --------------------------------------------------
+# 4. Database
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("POSTGRES_DB", "paperscope"),
-        "USER": os.getenv("POSTGRES_USER", "paperscope_user"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD", ""),
-        "HOST": os.getenv("POSTGRES_HOST", "127.0.0.1"),
-        "PORT": os.getenv("POSTGRES_PORT", "5432"),
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': env('DB_NAME'),
+        'USER': env('DB_USER'),
+        'PASSWORD': env('DB_PASSWORD'),
+        'HOST': env('DB_HOST'),
+        'PORT': env('DB_PORT'),
     }
 }
 
-# --------------------------------------------------
-# Custom user model
-# --------------------------------------------------
-AUTH_USER_MODEL = "users.User"
+# 5. Auth & User Model
+AUTH_USER_MODEL = 'users.User'
+SITE_ID = 1
 
-AUTHENTICATION_BACKENDS = [
+AUTHENTICATION_BACKENDS = (
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
-]
+)
 
-# Keep username + email
-ACCOUNT_AUTHENTICATION_METHOD = "username_email"
-ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_USERNAME_REQUIRED = True
-ACCOUNT_EMAIL_VERIFICATION = "none"
-
-# --------------------------------------------------
-# dj-rest-auth: use token auth
-# --------------------------------------------------
+# 6. REST Framework & JWT Setup
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
-    ],
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
     ],
 }
 
-REST_AUTH_REGISTER_SERIALIZERS = {
-    "REGISTER_SERIALIZER": "apps.users.serializers.CustomRegisterSerializer"
+REST_AUTH = {
+    'USE_JWT': True,
+    'JWT_AUTH_COOKIE': 'paperscope-auth',
+    'JWT_AUTH_REFRESH_COOKIE': 'paperscope-refresh-token',
+    'REGISTER_SERIALIZER': 'apps.users.serializers.CustomRegisterSerializer',
 }
-# IMPORTANT: avoids TokenModel check issues
-TOKEN_MODEL = None
 
-# --------------------------------------------------
-# Static & media
-# --------------------------------------------------
-STATIC_URL = "/static/"
-MEDIA_URL = "/media/"
+# --- THE CRITICAL FIX FOR YOUR ERROR ---
+SIMPLE_JWT = {
+    "USER_ID_FIELD": "user_id", # Tells JWT to look for 'user_id' instead of 'id'
+    "USER_ID_CLAIM": "user_id",
+}
+
+# 7. Allauth / Google Settings
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = False
+ACCOUNT_AUTHENTICATION_METHOD = 'email'
+ACCOUNT_EMAIL_VERIFICATION = 'none'
+
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': env('GOOGLE_CLIENT_ID'),
+            'secret': env('GOOGLE_SECRET'),
+            'key': ''
+        },
+        'SCOPE': ['profile', 'email'],
+        'AUTH_PARAMS': {'access_type': 'online'},
+        'VERIFIED_EMAIL': True,
+    }
+}
+
+SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_LOGIN_ON_GET = True
+
+# 8. Static & Media Files
+STATIC_URL = '/static/'
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / "media"
 
-# --------------------------------------------------
-# Timezone
-# --------------------------------------------------
-LANGUAGE_CODE = "en-us"
-TIME_ZONE = os.getenv("DJANGO_TIME_ZONE", "Asia/Dhaka")
+# 9. Internationalization
+LANGUAGE_CODE = 'en-us'
+TIME_ZONE = 'Asia/Dhaka'
 USE_I18N = True
 USE_TZ = True
 
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-# --------------------------------------------------
-# CORS (Frontend ↔ Backend)
-# --------------------------------------------------
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-
+# 10. Final Config
+CORS_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 CORS_ALLOW_CREDENTIALS = True
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

@@ -1,36 +1,72 @@
-﻿import React from "react";
-import { Link } from "react-router-dom";
+﻿import React, { useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext.jsx"; // Real auth context
 import "./Dashboard.css";
 
-export default function Dashboard() {
-  // Replace with real user later (from API / context)
-  const user = { firstName: "Alex", lastName: "Rivera", email: "demo@paperscope.ai", role: "Researcher" };
 
-  // Temporary mock data (replace with real API later)
+export default function Dashboard() {
+  const { user, logout, initializing } = useAuth(); // Get real user data
+  const navigate = useNavigate();
+
+
+  // 1. FIX THE LOOP: Wait for the auth check to finish before redirecting
+  useEffect(() => {
+    if (!initializing && !user) {
+      navigate('/login');
+    }
+  }, [user, initializing, navigate]);
+
+
+  // 2. SHOW LOADING: Prevents the "Flash" of the login page
+  if (initializing) {
+    return (
+      <div className="ps-loading-screen">
+        <div className="ps-loading-spinner"></div>
+        <p>Loading your research workspace...</p>
+      </div>
+    );
+  }
+
+
+  // Safety check
+  if (!user) return null;
+
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
+
+  // Mock data preserved as requested - replace these with API calls later
   const mockPapers = [
-    { id: "p1", userId: "2", title: "Deep Learning for Protein Folding: A Reproducibility Study" },
-    { id: "p2", userId: "2", title: "Attention Mechanisms in Low-Resource NLP" },
-    { id: "p3", userId: "2", title: "Statistical Methods for Climate Model Validation" },
-    { id: "p4", userId: "2", title: "Generative Adversarial Networks for Medical Imaging" },
+    { id: "p1", userId: user.user_id, title: "Deep Learning for Protein Folding: A Reproducibility Study" },
+    { id: "p2", userId: user.user_id, title: "Attention Mechanisms in Low-Resource NLP" },
+    { id: "p3", userId: user.user_id, title: "Statistical Methods for Climate Model Validation" },
+    { id: "p4", userId: user.user_id, title: "Generative Adversarial Networks for Medical Imaging" },
   ];
+
 
   const mockJobs = [
-    { id: "j1", userId: "2", status: "COMPLETED", paperTitle: mockPapers[0].title, createdAt: "2025-01-10T12:00:00Z", riskLabel: "HIGH", riskScore: 0.72 },
-    { id: "j2", userId: "2", status: "COMPLETED", paperTitle: mockPapers[1].title, createdAt: "2025-01-15T12:00:00Z", riskLabel: "LOW", riskScore: 0.34 },
-    { id: "j3", userId: "2", status: "FAILED", paperTitle: mockPapers[2].title, createdAt: "2025-01-22T12:00:00Z", riskLabel: null, riskScore: null },
-    { id: "j4", userId: "2", status: "QUEUED", paperTitle: mockPapers[3].title, createdAt: "2025-02-10T12:00:00Z", riskLabel: null, riskScore: null },
+    { id: "j1", userId: user.user_id, status: "COMPLETED", paperTitle: mockPapers[0].title, createdAt: "2025-01-10T12:00:00Z", riskLabel: "HIGH", riskScore: 0.72 },
+    { id: "j2", userId: user.user_id, status: "COMPLETED", paperTitle: mockPapers[1].title, createdAt: "2025-01-15T12:00:00Z", riskLabel: "LOW", riskScore: 0.34 },
+    { id: "j3", userId: user.user_id, status: "FAILED", paperTitle: mockPapers[2].title, createdAt: "2025-01-22T12:00:00Z", riskLabel: null, riskScore: null },
+    { id: "j4", userId: user.user_id, status: "QUEUED", paperTitle: mockPapers[3].title, createdAt: "2025-02-10T12:00:00Z", riskLabel: null, riskScore: null },
   ];
+
 
   const totalPapers = mockPapers.length;
   const completed = mockJobs.filter((j) => j.status === "COMPLETED").length;
   const inProgress = mockJobs.filter((j) => j.status === "QUEUED" || j.status === "PROCESSING").length;
   const failed = mockJobs.filter((j) => j.status === "FAILED").length;
 
+
   const quickActions = [
     { label: "Upload PDF", desc: "Submit a paper for analysis", to: "/dashboard/submit", icon: "⬆️" },
     { label: "Analyze arXiv", desc: "Analyze by arXiv link or ID", to: "/dashboard/submit", icon: "🔎" },
     { label: "View History", desc: "Browse past analyses", to: "/dashboard/history", icon: "🕘" },
   ];
+
 
   const navItems = [
     { label: "Dashboard", to: "/dashboard", icon: "▦", active: true },
@@ -40,10 +76,12 @@ export default function Dashboard() {
     { label: "Profile", to: "/dashboard/profile", icon: "👤" },
   ];
 
+
   function StatusBadge({ status }) {
     const s = String(status || "").toLowerCase();
     return <span className={`ps-pill ps-status ps-status-${s}`}>{status}</span>;
   }
+
 
   function RiskBadge({ label, score }) {
     if (!label) return null;
@@ -52,6 +90,7 @@ export default function Dashboard() {
     const text = `${label} Risk (${pct})`;
     return <span className={`ps-pill ps-risk ps-risk-${l}`}>{text}</span>;
   }
+
 
   return (
     <div className="ps-app">
@@ -64,7 +103,9 @@ export default function Dashboard() {
           </div>
         </div>
 
+
         <div className="ps-nav-title">NAVIGATION</div>
+
 
         <nav className="ps-nav">
           {navItems.map((item) => (
@@ -80,37 +121,42 @@ export default function Dashboard() {
           ))}
         </nav>
 
+
         <div className="ps-sidebar-footer">
           <div className="ps-userbox">
-            <div className="ps-avatar">AR</div>
+            {/* Dynamic Avatar using real user initials */}
+            <div className="ps-avatar">
+              {user.first_name?.[0]}{user.last_name?.[0]}
+            </div>
             <div className="ps-userbox-text">
-              <div className="ps-userbox-name">{user.firstName} {user.lastName}</div>
+              <div className="ps-userbox-name">{user.first_name} {user.last_name}</div>
               <div className="ps-userbox-email">{user.email}</div>
             </div>
           </div>
 
-          <button className="ps-signout" type="button" onClick={() => alert("Hook sign out here later")}>
+
+          <button className="ps-signout" type="button" onClick={handleLogout}>
             ⎋ Sign Out
           </button>
         </div>
       </aside>
 
-      {/* Main */}
+
       <main className="ps-main">
-        {/* Top bar */}
         <div className="ps-topbar">
           <div />
           <div className="ps-role-pill">{user.role}</div>
         </div>
 
+
         <div className="ps-content">
-          {/* Header */}
           <div className="ps-header">
-            <h1 className="ps-title">Welcome back, {user.firstName}!</h1>
+            <h1 className="ps-title">Welcome back, {user.first_name}!</h1>
             <p className="ps-subtitle">Here's an overview of your research analysis activity.</p>
           </div>
 
-          {/* Stats */}
+
+          {/* Stats Section */}
           <div className="ps-stats-grid">
             <div className="ps-card ps-stat-card">
               <div>
@@ -120,14 +166,16 @@ export default function Dashboard() {
               <div className="ps-stat-icon">📄</div>
             </div>
 
+
             <div className="ps-card ps-stat-card">
               <div>
                 <p className="ps-stat-title">Completed</p>
                 <p className="ps-stat-value">{completed}</p>
-                <p className="ps-trend ps-trend-positive">↑ +2 this week</p>
+                <p className="ps-trend ps-trend-positive">↑ Live data active</p>
               </div>
               <div className="ps-stat-icon">✅</div>
             </div>
+
 
             <div className="ps-card ps-stat-card">
               <div>
@@ -136,6 +184,7 @@ export default function Dashboard() {
               </div>
               <div className="ps-stat-icon">⏱</div>
             </div>
+
 
             <div className="ps-card ps-stat-card">
               <div>
@@ -146,7 +195,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Quick Actions */}
+
           <div className="ps-actions-grid">
             {quickActions.map((a) => (
               <Link key={a.label} to={a.to} className="ps-card ps-action-card">
@@ -161,6 +210,7 @@ export default function Dashboard() {
             ))}
           </div>
 
+
           {/* Recent Jobs */}
           <div className="ps-card ps-jobs-card">
             <div className="ps-jobs-header">
@@ -170,6 +220,7 @@ export default function Dashboard() {
               </Link>
             </div>
 
+
             <div className="ps-jobs-list">
               {mockJobs.slice(0, 4).map((job) => (
                 <div key={job.id} className="ps-job-row">
@@ -177,6 +228,7 @@ export default function Dashboard() {
                     <div className="ps-job-title">{job.paperTitle}</div>
                     <div className="ps-job-date">{new Date(job.createdAt).toLocaleDateString()}</div>
                   </div>
+
 
                   <div className="ps-job-right">
                     {job.riskLabel && <RiskBadge label={job.riskLabel} score={job.riskScore} />}
@@ -186,8 +238,6 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
-
-          {/* spacing */}
           <div style={{ height: 18 }} />
         </div>
       </main>

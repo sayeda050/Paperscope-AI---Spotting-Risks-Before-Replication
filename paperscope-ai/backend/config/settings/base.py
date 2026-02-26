@@ -105,9 +105,8 @@ REST_AUTH = {
     'REGISTER_SERIALIZER': 'apps.users.serializers.CustomRegisterSerializer',
 }
 
-# --- THE CRITICAL FIX FOR YOUR ERROR ---
 SIMPLE_JWT = {
-    "USER_ID_FIELD": "user_id", # Tells JWT to look for 'user_id' instead of 'id'
+    "USER_ID_FIELD": "user_id", 
     "USER_ID_CLAIM": "user_id",
 }
 
@@ -144,7 +143,20 @@ TIME_ZONE = 'Asia/Dhaka'
 USE_I18N = True
 USE_TZ = True
 
-# 10. Final Config
-CORS_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+# 10. Final Config (FIXED TYPO & ADDED COOKIE POLICIES)
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+# Ensure these are set for cross-domain cookies during development
 CORS_ALLOW_CREDENTIALS = True
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False

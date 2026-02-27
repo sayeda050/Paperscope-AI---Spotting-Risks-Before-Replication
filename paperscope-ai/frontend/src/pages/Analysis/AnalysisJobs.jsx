@@ -4,8 +4,8 @@ import { useAuth } from "../../contexts/AuthContext.jsx";
 import "./AnalysisJobs.css";
 
 // Lucide Icons (Mocking the imports for consistency with your snippet)
-const RefreshCw = () => <span>🔄</span>;
-const Eye = () => <span>👁️</span>;
+const RefreshCw = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>;
+const EyeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>;
 
 export default function AnalysisJobs() {
   const { user, logout } = useAuth(); // Destructured logout here
@@ -98,7 +98,7 @@ export default function AnalysisJobs() {
                       <td className="text-right">
                         {job.status === 'DONE' && (
                           <Link to={`/dashboard/result/${job.id}`} className="ps-btn-ghost">
-                            <Eye /> View
+                            <EyeIcon /> View
                           </Link>
                         )}
                       </td>

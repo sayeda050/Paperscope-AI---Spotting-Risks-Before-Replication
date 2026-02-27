@@ -9,6 +9,7 @@ import Register from "../pages/Auth/Register.jsx";
 import Dashboard from "../pages/Dashboard/Dashboard.jsx";
 import AnalysisJobs from "../pages/Analysis/AnalysisJobs.jsx";
 import AnalysisResult from "../pages/Analysis/AnalysisResult.jsx";
+import History from "../pages/Analysis/History.jsx"; // New Import
 
 function PrivateRoute({ children }) {
   const { isAuthed, initializing } = useAuth();
@@ -31,8 +32,8 @@ export default function AppRoutes() {
 
       <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
       
-      {/* The exact bridge you requested between Jobs and Results */}
       <Route path="/dashboard/jobs" element={<PrivateRoute><AnalysisJobs /></PrivateRoute>} />
+      <Route path="/dashboard/history" element={<PrivateRoute><History /></PrivateRoute>} /> {/* New Route */}
       <Route path="/dashboard/result/:jobId" element={<PrivateRoute><AnalysisResult /></PrivateRoute>} />
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

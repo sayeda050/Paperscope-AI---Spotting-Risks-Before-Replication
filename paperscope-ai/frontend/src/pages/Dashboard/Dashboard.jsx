@@ -1,13 +1,11 @@
-﻿import React, { useEffect } from "react";
+﻿﻿import React, { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../../contexts/AuthContext.jsx"; // Real auth context
+import { useAuth } from "../../contexts/AuthContext.jsx"; 
 import "./Dashboard.css";
 
-
 export default function Dashboard() {
-  const { user, logout, initializing } = useAuth(); // Get real user data
+  const { user, logout, initializing } = useAuth(); // Gets the logged-in person
   const navigate = useNavigate();
-
 
   // 1. FIX THE LOOP: Wait for the auth check to finish before redirecting
   useEffect(() => {
@@ -15,7 +13,6 @@ export default function Dashboard() {
       navigate('/login');
     }
   }, [user, initializing, navigate]);
-
 
   // 2. SHOW LOADING: Prevents the "Flash" of the login page
   if (initializing) {
@@ -27,25 +24,21 @@ export default function Dashboard() {
     );
   }
 
-
   // Safety check
   if (!user) return null;
-
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
-
-  // Mock data preserved as requested - replace these with API calls later
+  // Mock data preserved - replace these with API calls later
   const mockPapers = [
     { id: "p1", userId: user.user_id, title: "Deep Learning for Protein Folding: A Reproducibility Study" },
     { id: "p2", userId: user.user_id, title: "Attention Mechanisms in Low-Resource NLP" },
     { id: "p3", userId: user.user_id, title: "Statistical Methods for Climate Model Validation" },
     { id: "p4", userId: user.user_id, title: "Generative Adversarial Networks for Medical Imaging" },
   ];
-
 
   const mockJobs = [
     { id: "j1", userId: user.user_id, status: "COMPLETED", paperTitle: mockPapers[0].title, createdAt: "2025-01-10T12:00:00Z", riskLabel: "HIGH", riskScore: 0.72 },
@@ -54,12 +47,10 @@ export default function Dashboard() {
     { id: "j4", userId: user.user_id, status: "QUEUED", paperTitle: mockPapers[3].title, createdAt: "2025-02-10T12:00:00Z", riskLabel: null, riskScore: null },
   ];
 
-
   const totalPapers = mockPapers.length;
   const completed = mockJobs.filter((j) => j.status === "COMPLETED").length;
   const inProgress = mockJobs.filter((j) => j.status === "QUEUED" || j.status === "PROCESSING").length;
   const failed = mockJobs.filter((j) => j.status === "FAILED").length;
-
 
   const quickActions = [
     { label: "Upload PDF", desc: "Submit a paper for analysis", to: "/dashboard/submit", icon: "⬆️" },
@@ -67,21 +58,10 @@ export default function Dashboard() {
     { label: "View History", desc: "Browse past analyses", to: "/dashboard/history", icon: "🕘" },
   ];
 
-
-  const navItems = [
-    { label: "Dashboard", to: "/dashboard", icon: "▦", active: true },
-    { label: "Submit Paper", to: "/dashboard/submit", icon: "⬆" },
-    { label: "Analysis Jobs", to: "/dashboard/jobs", icon: "⏱" },
-    { label: "History", to: "/dashboard/history", icon: "🕘" },
-    { label: "Profile", to: "/dashboard/profile", icon: "👤" },
-  ];
-
-
   function StatusBadge({ status }) {
     const s = String(status || "").toLowerCase();
     return <span className={`ps-pill ps-status ps-status-${s}`}>{status}</span>;
   }
-
 
   function RiskBadge({ label, score }) {
     if (!label) return null;
@@ -91,63 +71,42 @@ export default function Dashboard() {
     return <span className={`ps-pill ps-risk ps-risk-${l}`}>{text}</span>;
   }
 
-
   return (
     <div className="ps-app">
-      {/* Sidebar */}
+      {/* Sidebar - Matching AnalysisJobs EXACTLY, populated with real user data */}
       <aside className="ps-sidebar">
         <div className="ps-brand">
-          <div className="ps-brand-badge">🛡️</div>
-          <div className="ps-brand-text">
-            <div className="ps-brand-title">PaperScope AI</div>
-          </div>
+          <div className="ps-logo-shield">🛡️</div>
+          <span className="ps-brand-name">PaperScope AI</span>
         </div>
-
-
-        <div className="ps-nav-title">NAVIGATION</div>
-
-
-        <nav className="ps-nav">
-          {navItems.map((item) => (
-            <Link
-              key={item.label}
-              to={item.to}
-              className={`ps-nav-item ${item.active ? "is-active" : ""}`}
-            >
-              <span className="ps-nav-icon">{item.icon}</span>
-              <span className="ps-nav-label">{item.label}</span>
-              <span className="ps-nav-arrow">›</span>
-            </Link>
-          ))}
-        </nav>
-
-
+        <div className="ps-nav-section">
+          <p className="ps-nav-label">NAVIGATION</p>
+          <Link to="/dashboard" className="ps-nav-link active">▦ Dashboard <span className="ps-chevron">›</span></Link>
+          <Link to="/dashboard/submit" className="ps-nav-link">⬆ Submit Paper</Link>
+          <Link to="/dashboard/jobs" className="ps-nav-link">⏱ Analysis Jobs</Link>
+          <Link to="/dashboard/history" className="ps-nav-link">🕘 History</Link>
+          <Link to="/dashboard/profile" className="ps-nav-link">👤 Profile</Link>
+        </div>
         <div className="ps-sidebar-footer">
-          <div className="ps-userbox">
-            {/* Dynamic Avatar using real user initials */}
-            <div className="ps-avatar">
-              {user.first_name?.[0]}{user.last_name?.[0]}
+          <div className="ps-user-card">
+            <div className="ps-user-avatar">
+              {user.first_name?.[0] || ""}{user.last_name?.[0] || ""}
             </div>
-            <div className="ps-userbox-text">
-              <div className="ps-userbox-name">{user.first_name} {user.last_name}</div>
-              <div className="ps-userbox-email">{user.email}</div>
+            <div className="ps-user-meta">
+              <p className="ps-user-name">{user.first_name} {user.last_name}</p>
+              <p className="ps-user-email">{user.email}</p>
             </div>
           </div>
-
-
-          <button className="ps-signout" type="button" onClick={handleLogout}>
-            ⎋ Sign Out
-          </button>
+          <button className="ps-btn-logout" onClick={handleLogout}>⎋ Sign Out</button>
         </div>
       </aside>
 
-
+      {/* Main Content Area - STRICTLY UNTOUCHED LOGIC */}
       <main className="ps-main">
         <div className="ps-topbar">
           <div />
           <div className="ps-role-pill">{user.role}</div>
         </div>
-
 
         <div className="ps-content">
           <div className="ps-header">
@@ -155,8 +114,6 @@ export default function Dashboard() {
             <p className="ps-subtitle">Here's an overview of your research analysis activity.</p>
           </div>
 
-
-          {/* Stats Section */}
           <div className="ps-stats-grid">
             <div className="ps-card ps-stat-card">
               <div>
@@ -165,7 +122,6 @@ export default function Dashboard() {
               </div>
               <div className="ps-stat-icon">📄</div>
             </div>
-
 
             <div className="ps-card ps-stat-card">
               <div>
@@ -176,7 +132,6 @@ export default function Dashboard() {
               <div className="ps-stat-icon">✅</div>
             </div>
 
-
             <div className="ps-card ps-stat-card">
               <div>
                 <p className="ps-stat-title">In Progress</p>
@@ -184,7 +139,6 @@ export default function Dashboard() {
               </div>
               <div className="ps-stat-icon">⏱</div>
             </div>
-
 
             <div className="ps-card ps-stat-card">
               <div>
@@ -194,7 +148,6 @@ export default function Dashboard() {
               <div className="ps-stat-icon">⚠️</div>
             </div>
           </div>
-
 
           <div className="ps-actions-grid">
             {quickActions.map((a) => (
@@ -210,8 +163,6 @@ export default function Dashboard() {
             ))}
           </div>
 
-
-          {/* Recent Jobs */}
           <div className="ps-card ps-jobs-card">
             <div className="ps-jobs-header">
               <h2 className="ps-jobs-title">Recent Analysis Jobs</h2>
@@ -220,7 +171,6 @@ export default function Dashboard() {
               </Link>
             </div>
 
-
             <div className="ps-jobs-list">
               {mockJobs.slice(0, 4).map((job) => (
                 <div key={job.id} className="ps-job-row">
@@ -228,7 +178,6 @@ export default function Dashboard() {
                     <div className="ps-job-title">{job.paperTitle}</div>
                     <div className="ps-job-date">{new Date(job.createdAt).toLocaleDateString()}</div>
                   </div>
-
 
                   <div className="ps-job-right">
                     {job.riskLabel && <RiskBadge label={job.riskLabel} score={job.riskScore} />}

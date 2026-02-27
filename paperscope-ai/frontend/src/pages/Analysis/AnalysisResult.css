@@ -1,0 +1,100 @@
+/* Layout skeleton */
+.ps-app-frame { display: flex; min-height: 100vh; background: #ffffff; font-family: system-ui, -apple-system, sans-serif; }
+
+/* Perfect Sidebar Match */
+.ps-sidebar-dark { width: 250px; background: #0f172a; color: white; display: flex; flex-direction: column; padding: 24px 16px; flex-shrink: 0; }
+.ps-brand-section { display: flex; align-items: center; gap: 12px; margin-bottom: 40px; padding-left: 8px; }
+.ps-brand-name { font-weight: 700; font-size: 18px; color: #f8fafc; }
+
+.ps-nav-label-caps { font-size: 11px; color: #64748b; font-weight: 600; padding-left: 8px; margin-bottom: 12px; letter-spacing: 0.05em; text-transform: uppercase; }
+.ps-side-link { display: flex; align-items: center; gap: 12px; padding: 10px 12px; color: #94a3b8; text-decoration: none; font-size: 14px; border-radius: 8px; margin-bottom: 4px; transition: color 0.2s, background 0.2s; font-weight: 500; }
+.ps-side-link:hover { color: #f8fafc; background: rgba(255, 255, 255, 0.05); }
+.ps-side-link.active { background: rgba(30, 41, 59, 0.7); color: #2dd4bf; }
+
+.ps-sidebar-bottom { margin-top: auto; }
+.ps-user-pill { display: flex; align-items: center; gap: 12px; padding: 12px 8px; margin-bottom: 8px; }
+.ps-user-avatar { width: 32px; height: 32px; background: #2dd4bf; color: #0f172a; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0;}
+.ps-user-name { font-size: 13px; font-weight: 600; color: #f8fafc; margin: 0; }
+.ps-user-email { font-size: 12px; color: #64748b; margin: 0; }
+.ps-btn-signout { display: flex; align-items: center; gap: 12px; width: 100%; background: none; border: none; color: #94a3b8; padding: 10px 12px; cursor: pointer; font-size: 14px; font-weight: 500; text-align: left; border-radius: 8px; transition: color 0.2s, background 0.2s; }
+.ps-btn-signout:hover { color: #f8fafc; background: rgba(255, 255, 255, 0.05); }
+
+/* Main Content Layout */
+.ps-main-layout { flex: 1; display: flex; flex-direction: column; overflow-y: auto; background-color: #f9fafb;}
+.ps-top-header { height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 40px; background: #ffffff; border-bottom: 1px solid #e2e8f0; }
+.ps-role-tag { background: #e1fbf4; color: #0d9488; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.ps-page-content { padding: 40px; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+/* Typography & Content Structure */
+.ps-mb-6 { margin-bottom: 24px; }
+.ps-mb-4 { margin-bottom: 16px; }
+.ps-mb-2 { margin-bottom: 8px; }
+.ps-mb-1 { margin-bottom: 4px; }
+.ps-mt-4 { margin-top: 16px; }
+.ps-mt-3 { margin-top: 12px; }
+.ps-mt-1 { margin-top: 4px; }
+.ps-space-y-4 > * + * { margin-top: 16px; }
+.ps-space-y-1 > * + * { margin-top: 6px; }
+
+.ps-view-title { font-size: 24px; font-weight: 700; color: #0f172a; margin: 0; }
+.ps-view-subtitle { color: #64748b; margin-top: 4px; font-size: 14px; }
+.ps-text-6xl { font-size: 60px; line-height: 1; }
+.ps-text-sm { font-size: 14px; }
+.ps-text-xs { font-size: 12px; }
+.ps-font-extrabold { font-weight: 800; }
+.ps-font-medium { font-weight: 500; }
+.ps-muted-text { color: #64748b; }
+.ps-leading-relaxed { line-height: 1.625; }
+.ps-text-center { text-align: center; }
+.ps-flex-between { display: flex; align-items: center; justify-content: space-between; }
+.ps-flex-wrap { display: flex; flex-wrap: wrap; }
+.ps-gap-2 { gap: 8px; }
+
+/* Grid Systems */
+.ps-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.ps-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.ps-col-1 { grid-column: span 1 / span 1; }
+.ps-col-2 { grid-column: span 2 / span 2; }
+
+@media (max-width: 1024px) {
+  .ps-grid-3, .ps-grid-2 { grid-template-columns: 1fr; }
+  .ps-col-2 { grid-column: span 1 / span 1; }
+}
+
+/* Cards */
+.ps-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; }
+.ps-card-shine { box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: box-shadow 0.2s ease, transform 0.2s ease; }
+.ps-card-shine:hover { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); transform: translateY(-2px); }
+.ps-card-header { padding: 24px 24px 0 24px; }
+.ps-card-title { font-size: 16px; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 8px; color: #0f172a; }
+.ps-card-content { padding: 24px; }
+.ps-p-6 { padding: 24px; }
+
+/* Buttons & Badges */
+.ps-btn-ghost { display: inline-flex; align-items: center; font-size: 14px; font-weight: 500; color: #0f172a; background: transparent; border: none; cursor: pointer; text-decoration: none; transition: background 0.2s; border-radius: 6px; }
+.ps-btn-ghost:hover { text-decoration: underline; }
+.ps-mr-1 { margin-right: 4px; }
+
+.ps-badge-secondary { display: inline-flex; align-items: center; padding: 4px 10px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 600; border-radius: 9999px; }
+
+/* Risk Colors */
+.ps-text-risk-low { color: #16a34a; }
+.ps-text-risk-medium { color: #d97706; }
+.ps-text-risk-high { color: #dc2626; }
+
+.ps-bg-risk-low { background-color: #16a34a; }
+.ps-bg-risk-medium { background-color: #f59e0b; }
+.ps-bg-risk-high { background-color: #dc2626; }
+
+.ps-risk-badge { display: inline-block; padding: 2px 10px; font-size: 12px; font-weight: 600; border-radius: 9999px; border: 1px solid transparent; }
+.ps-risk-badge-low { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+.ps-risk-badge-medium { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.ps-risk-badge-high { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+
+/* Progress Bars */
+.ps-progress-track { width: 100%; height: 10px; background: #f1f5f9; border-radius: 9999px; overflow: hidden; }
+.ps-progress-fill { height: 100%; border-radius: 9999px; transition: width 0.5s ease; }
+
+/* Factors List */
+.ps-factor-item { font-size: 14px; color: #64748b; display: flex; align-items: flex-start; gap: 8px; }
+.ps-factor-dot { display: block; width: 6px; height: 6px; background-color: #0f172a; border-radius: 50%; margin-top: 7px; flex-shrink: 0; }

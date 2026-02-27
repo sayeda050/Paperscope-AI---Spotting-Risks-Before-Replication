@@ -1,4 +1,4 @@
-﻿import React from 'react';
+﻿﻿import React from 'react';
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext.jsx";
 
@@ -10,6 +10,7 @@ import Dashboard from "../pages/Dashboard/Dashboard.jsx";
 import AnalysisJobs from "../pages/Analysis/AnalysisJobs.jsx";
 import AnalysisResult from "../pages/Analysis/AnalysisResult.jsx";
 import History from "../pages/Analysis/History.jsx"; // New Import
+import Profile from "../pages/Dashboard/Profile.jsx"; // New Import
 
 function PrivateRoute({ children }) {
   const { isAuthed, initializing } = useAuth();
@@ -35,7 +36,7 @@ export default function AppRoutes() {
       <Route path="/dashboard/jobs" element={<PrivateRoute><AnalysisJobs /></PrivateRoute>} />
       <Route path="/dashboard/history" element={<PrivateRoute><History /></PrivateRoute>} /> {/* New Route */}
       <Route path="/dashboard/result/:jobId" element={<PrivateRoute><AnalysisResult /></PrivateRoute>} />
-
+      <Route path="/dashboard/profile" element={<PrivateRoute><Profile /></PrivateRoute>} /> {/* New Route */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

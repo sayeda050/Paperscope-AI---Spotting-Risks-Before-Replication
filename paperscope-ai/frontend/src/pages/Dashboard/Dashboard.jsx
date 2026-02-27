@@ -105,7 +105,7 @@ export default function Dashboard() {
       <main className="ps-main">
         <div className="ps-topbar">
           <div />
-          <div className="ps-role-pill">{user.role}</div>
+          <div className="ps-role-pill">Researcher</div>
         </div>
 
         <div className="ps-content">

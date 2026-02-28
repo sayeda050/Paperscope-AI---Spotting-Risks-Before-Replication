@@ -35,3 +35,116 @@
   color: #0f172a;
   font-weight: 700;
 }
+/* ================================
+   Modal style for Auth pages
+   ================================ */
+.ps-modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 999;
+
+  /* dark overlay + blur */
+  background: rgba(3, 6, 12, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.ps-modal {
+  width: min(480px, 100%);
+  border-radius: 18px;
+  padding: 22px 20px;
+  background: rgba(17, 24, 39, 0.92); /* glassy */
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+.ps-modal-header {
+  margin-bottom: 14px;
+}
+
+.ps-modal-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.ps-modal-subtitle {
+  margin: 8px 0 0;
+  font-size: 14px;
+  opacity: 0.85;
+  line-height: 1.4;
+}
+
+.ps-hint {
+  font-size: 13px;
+  opacity: 0.75;
+  margin-top: 10px;
+}
+
+.ps-link-muted {
+  font-size: 14px;
+  opacity: 0.9;
+  color: #d1d5db;
+  text-decoration: none;
+}
+
+.ps-link-muted:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+/* Success box (optional) */
+.ps-register-success {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: rgba(255, 255, 255, 0.92);
+  padding: 10px 12px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+/* ================================
+   Modal polish: inputs + buttons
+   ================================ */
+.ps-modal .ps-input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.ps-modal .ps-input::placeholder {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.ps-modal .ps-input:focus {
+  outline: none;
+  border-color: rgba(13, 148, 136, 0.7);
+  box-shadow: 0 0 0 4px rgba(13, 148, 136, 0.18);
+}
+
+.ps-modal .ps-btn-primary {
+  background: linear-gradient(135deg, rgba(13, 148, 136, 1), rgba(20, 184, 166, 1));
+  border: none;
+}
+
+.ps-modal .ps-btn-primary:hover {
+  filter: brightness(1.05);
+}
+
+.ps-modal .ps-btn-primary:disabled {
+  opacity: 0.7;
+}
+/* Optional: make demo box match dark theme */
+.ps-demo-box {
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+.ps-demo-box strong {
+  color: rgba(255, 255, 255, 0.92);
+}

@@ -1,12 +1,13 @@
-﻿import React from 'react';
+﻿import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext.jsx";
-
 
 // Import your pages - matching your folder structure
 import Index from "../pages/Auth/Index.jsx";
 import Login from "../pages/Auth/Login.jsx";
 import Register from "../pages/Auth/Register.jsx";
+import ForgotPassword from "../pages/Auth/ForgotPassword.jsx";
+import ResetPassword from "../pages/Auth/ResetPassword.jsx";
 import Dashboard from "../pages/Dashboard/Dashboard.jsx";
 
 
@@ -17,16 +18,13 @@ import Dashboard from "../pages/Dashboard/Dashboard.jsx";
 function PrivateRoute({ children }) {
   const { isAuthed, initializing } = useAuth();
 
-
-  // 1. If we are still checking the cookie, show a blank screen or spinner
+  // If we are still checking the cookie, show a blank screen or spinner
   // This prevents the "bounce" back to login
   if (initializing) return <div className="ps-loading">Verifying session...</div>;
 
-
-  // 2. Only redirect if initializing is DONE and user is definitely not authed
+  // Only redirect if initializing is DONE and user is definitely not authed
   return isAuthed ? children : <Navigate to="/login" replace />;
 }
-
 
 /**
  * PublicRoute: Prevents logged-in users from seeing Login/Register pages.
@@ -34,21 +32,17 @@ function PrivateRoute({ children }) {
 function PublicRoute({ children }) {
   const { isAuthed, initializing } = useAuth();
 
-
   if (initializing) return null;
-
 
   // If already logged in, send them straight to the dashboard
   return !isAuthed ? children : <Navigate to="/dashboard" replace />;
 }
-
 
 export default function AppRoutes() {
   return (
     <Routes>
       {/* Landing Page */}
       <Route path="/" element={<Index />} />
-
 
       {/* Auth Pages (Protected from logged-in users) */}
       <Route
@@ -68,6 +62,23 @@ export default function AppRoutes() {
         }
       />
 
+      {/* ✅ Forgot / Reset Password (Public) */}
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicRoute>
+            <ForgotPassword />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/reset-password"
+        element={
+          <PublicRoute>
+            <ResetPassword />
+          </PublicRoute>
+        }
+      />
 
       {/* ✅ Protected Dashboard (Only for logged-in users) */}
       <Route
@@ -78,7 +89,6 @@ export default function AppRoutes() {
           </PrivateRoute>
         }
       />
-
 
       {/* Fallback for unknown URLs */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

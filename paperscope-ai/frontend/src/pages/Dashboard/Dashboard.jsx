@@ -1,4 +1,4 @@
-﻿﻿import React, { useEffect } from "react";
+﻿import React, { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext.jsx"; 
 import "./Dashboard.css";
@@ -7,14 +7,22 @@ export default function Dashboard() {
   const { user, logout, initializing } = useAuth(); // Gets the logged-in person
   const navigate = useNavigate();
 
-  // 1. FIX THE LOOP: Wait for the auth check to finish before redirecting
-  useEffect(() => {
-    if (!initializing && !user) {
-      navigate('/login');
-    }
-  }, [user, initializing, navigate]);
+  // Identify if the user is an admin
+  const isAdmin = user?.is_superuser || user?.role === 'ADMIN';
 
-  // 2. SHOW LOADING: Prevents the "Flash" of the login page
+  // 1. FIX THE LOOP: Wait for the auth check to finish before redirecting
+  // 2. ADMIN CHECK: Redirect admins to their specific dashboard
+  useEffect(() => {
+    if (!initializing) {
+      if (!user) {
+        navigate('/login');
+      } else if (isAdmin) {
+        navigate('/dashboard/admin');
+      }
+    }
+  }, [user, initializing, isAdmin, navigate]);
+
+  // 3. SHOW LOADING: Prevents the "Flash" of the login page
   if (initializing) {
     return (
       <div className="ps-loading-screen">
@@ -105,7 +113,7 @@ export default function Dashboard() {
       <main className="ps-main">
         <div className="ps-topbar">
           <div />
-          <div className="ps-role-pill">{user.role}</div>
+          <div className="ps-role-pill">Researcher</div>
         </div>
 
         <div className="ps-content">

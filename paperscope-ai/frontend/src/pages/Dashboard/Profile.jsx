@@ -11,6 +11,9 @@ const Loader2 = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height=
 export default function Profile() {
   const { user, logout, updateProfile } = useAuth();
   
+  // Identify if the logged-in user is an Admin
+  const isAdmin = user?.is_superuser || user?.role === 'ADMIN';
+  
   // Logic to fetch info from logged-in user
   const [firstName, setFirstName] = useState(user?.first_name || '');
   const [lastName, setLastName] = useState(user?.last_name || '');
@@ -39,20 +42,38 @@ export default function Profile() {
 
   return (
     <div className="ps-dashboard-layout">
-      {/* Sidebar remains standard to match app-wide layout */}
+      {/* DYNAMIC SIDEBAR: Changes based on isAdmin */}
       <aside className="ps-sidebar">
         <div className="ps-brand">
           <div className="ps-logo-shield">🛡️</div>
           <span className="ps-brand-name">PaperScope AI</span>
         </div>
+        
         <div className="ps-nav-section">
-          <p className="ps-nav-label">NAVIGATION</p>
-          <Link to="/dashboard" className="ps-nav-link">▦ Dashboard</Link>
-          <Link to="/dashboard/submit" className="ps-nav-link">⬆ Submit Paper</Link>
-          <Link to="/dashboard/jobs" className="ps-nav-link">⏱ Analysis Jobs</Link>
-          <Link to="/dashboard/history" className="ps-nav-link">🕘 History</Link>
-          <Link to="/dashboard/profile" className="ps-nav-link active">👤 Profile <span className="ps-chevron">›</span></Link>
+          <p className="ps-nav-label">{isAdmin ? "ADMINISTRATION" : "NAVIGATION"}</p>
+          
+          {isAdmin ? (
+            <>
+              <Link to="/dashboard/admin" className="ps-nav-link">▦ Dashboard</Link>
+              <Link to="/dashboard/admin/users" className="ps-nav-link">👥 Users</Link>
+              <Link to="/dashboard/admin/papers" className="ps-nav-link">📄 Papers</Link>
+              <Link to="/dashboard/admin/jobs" className="ps-nav-link">⏱ Jobs</Link>
+              <Link to="/dashboard/admin/results" className="ps-nav-link">🗄️ Results</Link>
+              <Link to="/dashboard/admin/models" className="ps-nav-link">💠 Models</Link>
+              <Link to="/dashboard/admin/errors" className="ps-nav-link">⚠️ Error Logs</Link>
+              <Link to="/dashboard/profile" className="ps-nav-link active">👤 Profile <span className="ps-chevron">›</span></Link>
+            </>
+          ) : (
+            <>
+              <Link to="/dashboard" className="ps-nav-link">▦ Dashboard</Link>
+              <Link to="/dashboard/submit" className="ps-nav-link">⬆ Submit Paper</Link>
+              <Link to="/dashboard/jobs" className="ps-nav-link">⏱ Analysis Jobs</Link>
+              <Link to="/dashboard/history" className="ps-nav-link">🕘 History</Link>
+              <Link to="/dashboard/profile" className="ps-nav-link active">👤 Profile <span className="ps-chevron">›</span></Link>
+            </>
+          )}
         </div>
+
         <div className="ps-sidebar-footer">
           <div className="ps-user-card">
             <div className="ps-user-avatar">
@@ -70,7 +91,10 @@ export default function Profile() {
       <main className="ps-main-content">
         <header className="ps-top-bar">
           <div />
-          <span className="ps-role-badge">Researcher</span>
+          {/* Dynamically update the role badge as well to avoid confusion */}
+          <span className={`ps-role-badge ${isAdmin ? 'ps-role-admin' : ''}`}>
+            {isAdmin ? 'Administrator' : 'Researcher'}
+          </span>
         </header>
 
         {/* Isolated Scoped Area */}
@@ -104,7 +128,7 @@ export default function Profile() {
                   </div>
                   <div className="ps-profile-group">
                     <label>Role</label>
-                    <input className="ps-profile-readonly" value={user.role === 'ADMIN' ? 'Administrator' : 'Researcher'} disabled />
+                    <input className="ps-profile-readonly" value={isAdmin ? 'Administrator' : 'Researcher'} disabled />
                   </div>
                   <button type="submit" className="ps-profile-submit-btn" disabled={saving}>
                     {saving && <Loader2 />} Save Changes

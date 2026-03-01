@@ -103,6 +103,8 @@ REST_AUTH = {
     'JWT_AUTH_COOKIE': 'paperscope-auth',
     'JWT_AUTH_REFRESH_COOKIE': 'paperscope-refresh-token',
     'REGISTER_SERIALIZER': 'apps.users.serializers.CustomRegisterSerializer',
+    # <--- ADDED THIS: Tells Django to send role/is_superuser back to React --->
+    'USER_DETAILS_SERIALIZER': 'apps.users.serializers.UserSerializer', 
 }
 
 SIMPLE_JWT = {
@@ -115,6 +117,10 @@ ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_AUTHENTICATION_METHOD = 'email'
 ACCOUNT_EMAIL_VERIFICATION = 'none'
+
+# <--- ADDED THESE TWO LINES: Allows Google to log into your local terminal-created Admin account --->
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
 
 SOCIALACCOUNT_PROVIDERS = {
     'google': {

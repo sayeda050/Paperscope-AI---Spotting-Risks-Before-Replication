@@ -7,7 +7,7 @@ import './Login.css';
 export default function Login() {
   const { login, googleLogin } = useAuth();
   const navigate = useNavigate();
- 
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -26,14 +26,14 @@ export default function Login() {
     e.preventDefault();
     setError('');
     setLoading(true);
-   
+    
     const res = await login({
       email: email,
       password: password
     });
-   
+    
     setLoading(false);
-   
+    
     if (res.success) {
       navigate('/dashboard');
     } else {
@@ -56,12 +56,12 @@ export default function Login() {
           setError(`Google login failed: ${response.error}`);
           return;
         }
-       
+        
         if (response.access_token) {
           setLoading(true);
           const res = await googleLogin(response.access_token);
           setLoading(false);
-         
+          
           if (res.success) {
             navigate('/dashboard');
           } else {
@@ -70,14 +70,14 @@ export default function Login() {
         }
       },
     });
-   
+    
     client.requestAccessToken();
   };
 
   return (
     <div className="ps-register-page"> {/* Keeping your existing CSS class */}
       <div className="ps-register-card">
-       
+        
         <Link to="/" className="ps-register-brand">
           <Shield className="ps-brand-icon" size={32} />
           <span className="ps-brand-text">PaperScope AI</span>
@@ -90,8 +90,11 @@ export default function Login() {
 
         {error && <div className="ps-register-error">{error}</div>}
 
-        <form onSubmit={handleSubmit} className="ps-register-form">
-         
+        {/* FIXED: Added autoComplete="off" and hidden dummy fields to block browser autofill */}
+        <form onSubmit={handleSubmit} className="ps-register-form" autoComplete="off">
+          <input type="text" style={{display: 'none'}} />
+          <input type="password" style={{display: 'none'}} />
+
           <div className="ps-field">
             <label htmlFor="email" className="ps-label">Email</label>
             <div className="ps-input-wrapper">
@@ -103,6 +106,7 @@ export default function Login() {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="off"
                 required
               />
             </div>
@@ -122,6 +126,7 @@ export default function Login() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
                 required
               />
             </div>

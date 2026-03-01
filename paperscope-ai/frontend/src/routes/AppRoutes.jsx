@@ -1,4 +1,4 @@
-﻿﻿import React from 'react';
+﻿import React from 'react';
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext.jsx";
 
@@ -7,10 +7,11 @@ import Index from "../pages/Auth/Index.jsx";
 import Login from "../pages/Auth/Login.jsx";
 import Register from "../pages/Auth/Register.jsx";
 import Dashboard from "../pages/Dashboard/Dashboard.jsx";
+import AdminDashboard from "../pages/Dashboard/AdminDashboard.jsx"; // <-- Added Admin Import
 import AnalysisJobs from "../pages/Analysis/AnalysisJobs.jsx";
 import AnalysisResult from "../pages/Analysis/AnalysisResult.jsx";
-import History from "../pages/Analysis/History.jsx"; // New Import
-import Profile from "../pages/Dashboard/Profile.jsx"; // New Import
+import History from "../pages/Analysis/History.jsx"; 
+import Profile from "../pages/Dashboard/Profile.jsx"; 
 
 function PrivateRoute({ children }) {
   const { isAuthed, initializing } = useAuth();
@@ -33,10 +34,13 @@ export default function AppRoutes() {
 
       <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
       
+      {/* <-- Added Admin Route Here --> */}
+      <Route path="/dashboard/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
+      
       <Route path="/dashboard/jobs" element={<PrivateRoute><AnalysisJobs /></PrivateRoute>} />
-      <Route path="/dashboard/history" element={<PrivateRoute><History /></PrivateRoute>} /> {/* New Route */}
+      <Route path="/dashboard/history" element={<PrivateRoute><History /></PrivateRoute>} /> 
       <Route path="/dashboard/result/:jobId" element={<PrivateRoute><AnalysisResult /></PrivateRoute>} />
-      <Route path="/dashboard/profile" element={<PrivateRoute><Profile /></PrivateRoute>} /> {/* New Route */}
+      <Route path="/dashboard/profile" element={<PrivateRoute><Profile /></PrivateRoute>} /> 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

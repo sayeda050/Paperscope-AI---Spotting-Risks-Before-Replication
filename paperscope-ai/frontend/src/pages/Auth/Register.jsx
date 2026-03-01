@@ -22,7 +22,7 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-   
+    
     if (form.password !== form.confirm) {
       setError('Passwords do not match');
       return;
@@ -31,9 +31,9 @@ export default function Register() {
       setError('Password must be at least 6 characters');
       return;
     }
-   
+    
     setLoading(true);
-   
+    
     const res = await register({
       first_name: form.firstName,
       last_name: form.lastName,
@@ -42,9 +42,9 @@ export default function Register() {
       password1: form.password, 
       password2: form.password  
     });
-   
+    
     setLoading(false);
-   
+    
     if (res.success) {
       navigate('/login');
     } else {
@@ -67,12 +67,12 @@ export default function Register() {
           setError(`Google login failed: ${response.error}`);
           return;
         }
-       
+        
         if (response.access_token) {
           setLoading(true);
           const res = await googleLogin(response.access_token);
           setLoading(false);
-         
+          
           if (res.success) {
             navigate('/dashboard'); 
           } else {
@@ -81,7 +81,7 @@ export default function Register() {
         }
       },
     });
-   
+    
     client.requestAccessToken();
   };
 
@@ -90,7 +90,7 @@ export default function Register() {
   return (
     <div className="ps-register-page">
       <div className="ps-register-card">
-       
+        
         <Link to="/" className="ps-register-brand">
           <Shield className="ps-brand-icon" size={32} />
           <span className="ps-brand-text">PaperScope AI</span>
@@ -103,7 +103,11 @@ export default function Register() {
 
         {error && <div className="ps-register-error">{error}</div>}
 
-        <form onSubmit={handleSubmit} className="ps-register-form">
+        {/* FIXED: Added autoComplete="off" and hidden dummy fields to block browser autofill */}
+        <form onSubmit={handleSubmit} className="ps-register-form" autoComplete="off">
+          <input type="text" style={{display: 'none'}} />
+          <input type="password" style={{display: 'none'}} />
+
           <div className="ps-register-grid">
             <div className="ps-field">
               <label htmlFor="fn" className="ps-label">First Name</label>
@@ -115,6 +119,7 @@ export default function Register() {
                   placeholder="Jane"
                   value={form.firstName}
                   onChange={update('firstName')}
+                  autoComplete="off"
                   required
                 />
               </div>
@@ -128,6 +133,7 @@ export default function Register() {
                 placeholder="Doe"
                 value={form.lastName}
                 onChange={update('lastName')}
+                autoComplete="off"
                 required
               />
             </div>
@@ -144,6 +150,7 @@ export default function Register() {
                 placeholder="you@example.com"
                 value={form.email}
                 onChange={update('email')}
+                autoComplete="off"
                 required
               />
             </div>
@@ -160,6 +167,7 @@ export default function Register() {
                 placeholder="Min 6 characters"
                 value={form.password}
                 onChange={update('password')}
+                autoComplete="new-password"
                 required
               />
             </div>
@@ -174,6 +182,7 @@ export default function Register() {
               placeholder="••••••••"
               value={form.confirm}
               onChange={update('confirm')}
+              autoComplete="new-password"
               required
             />
           </div>

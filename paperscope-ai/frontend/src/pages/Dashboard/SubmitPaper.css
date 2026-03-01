@@ -1,0 +1,262 @@
+.submit-paper-page {
+  min-height: 100vh;
+  background: #f5f7fb;
+  padding: 0;
+}
+
+.submit-paper-topbar {
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.submit-paper-role {
+  background: #e7f7f3;
+  color: #188977;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.submit-paper-content {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 36px 24px 48px;
+}
+
+.submit-paper-header h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.submit-paper-header p {
+  margin: 0 0 24px;
+  font-size: 16px;
+  color: #64748b;
+}
+
+.submit-paper-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #edf1f5;
+  padding: 4px;
+  border-radius: 12px;
+  margin-bottom: 28px;
+}
+
+.submit-tab {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.submit-tab.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+.submit-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 28px 24px;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
+}
+
+.submit-card h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.submit-card-subtitle {
+  margin: 0 0 24px;
+  font-size: 15px;
+  color: #64748b;
+}
+
+.submit-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.submit-form label {
+  margin-bottom: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.submit-form input {
+  height: 44px;
+  border: 1px solid #d7dde5;
+  border-radius: 12px;
+  padding: 0 14px;
+  font-size: 15px;
+  color: #111827;
+  margin-bottom: 18px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.submit-form input::placeholder {
+  color: #94a3b8;
+}
+
+.submit-form input:focus {
+  border-color: #188977;
+  box-shadow: 0 0 0 3px rgba(24, 137, 119, 0.12);
+}
+
+.upload-dropzone {
+  border: 2px dashed #cfd8e3;
+  border-radius: 16px;
+  min-height: 160px;
+  background: #fcfdff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.upload-dropzone:hover,
+.upload-dropzone.drag-active {
+  border-color: #9fd1c6;
+  background: #f6fffc;
+}
+
+.upload-file-icon {
+  color: #6b7280;
+  margin-bottom: 12px;
+}
+
+.upload-main-text {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #0f172a;
+}
+
+.upload-sub-text {
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.selected-file-box {
+  width: 100%;
+  background: #f8fafc;
+  border: 1px solid #dbe4ee;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.selected-file-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #0f172a;
+}
+
+.selected-file-name {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.selected-file-size {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.remove-file-btn {
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-file-btn:hover {
+  color: #b91c1c;
+}
+
+.submit-analysis-btn {
+  height: 46px;
+  border: none;
+  border-radius: 12px;
+  background: #8dbab2;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.submit-analysis-btn:hover {
+  background: #188977;
+}
+
+.submit-analysis-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .submit-paper-content {
+    padding: 24px 16px 36px;
+  }
+
+  .submit-paper-header h1 {
+    font-size: 24px;
+  }
+
+  .submit-card {
+    padding: 22px 16px;
+  }
+
+  .submit-paper-tabs {
+    width: 100%;
+    display: flex;
+  }
+
+  .submit-tab {
+    flex: 1;
+    justify-content: center;
+  }
+}

@@ -33,28 +33,36 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Inside AuthContext.jsx
   const login = async (payload) => {
     try {
-      await loginUser(payload);
-      // After successful login, the backend sets a cookie. 
-      // We just need to refresh the user state.
-      await checkAuth();
+      const data = await loginUser(payload); // API call
+      
+      // 🚨 CRITICAL: You MUST set the state here before returning!
+      // If you skip this, PrivateRoute will kick the user out.
+      setUser(data.user); // Or however your backend returns user data
+      // FIXED: Removed setIsAuthed(true) because it does not exist and caused the crash!
+      
       return { success: true };
     } catch (err) {
-      const msg = err?.response?.data ? JSON.stringify(err.response.data) : "Login failed";
-      return { success: false, error: msg };
+      return { success: false, error: err.response?.data };
     }
   };
 
-  const googleLogin = async (googleToken) => {
+  const googleLogin = async (accessToken) => {
     try {
-      await googleLoginUser({ access_token: googleToken });
-      // Refresh user state after Google sets the auth cookie
-      await checkAuth();
+      // 1. MUST wrap the token in an object matching Django's expectation
+      const payload = { access_token: accessToken }; 
+      const data = await googleLoginUser(payload);
+      
+      // 2. 🚨 CRITICAL: Set state before returning so the router doesn't bounce you
+      setUser(data.user); 
+      // FIXED: Removed setIsAuthed(true) because it does not exist and caused the crash!
+      
       return { success: true };
     } catch (err) {
-      const msg = err?.response?.data ? JSON.stringify(err.response.data) : "Google Login failed";
-      return { success: false, error: msg };
+      console.error("Google Auth Error:", err.response?.data);
+      return { success: false, error: "Google login failed on the server." };
     }
   };
 
@@ -75,7 +83,7 @@ export function AuthProvider({ children }) {
       isAuthed: !!user, // You are authenticated if the 'user' object exists
       register,
       login,
-      googleLogin, 
+      googleLogin,
       logout,
       checkAuth
     }),

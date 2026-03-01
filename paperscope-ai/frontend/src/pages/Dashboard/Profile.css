@@ -1,0 +1,139 @@
+/* Container Scoping */
+.ps-profile-scope {
+    max-width: 800px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.ps-profile-scope .ps-profile-heading {
+    margin-bottom: 32px;
+}
+
+.ps-profile-scope .ps-profile-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+}
+
+.ps-profile-scope .ps-profile-subtitle {
+    color: #64748b;
+    margin-top: 4px;
+}
+
+/* Card Isolation */
+.ps-profile-scope .ps-profile-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.ps-profile-scope .ps-profile-card-header {
+    padding: 24px 24px 0 24px;
+}
+
+.ps-profile-scope .ps-profile-card-label {
+    font-size: 16px;
+    font-weight: 500;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.ps-profile-scope .ps-profile-card-desc {
+    font-size: 13px;
+    color: #64748b;
+    margin-top: 4px;
+}
+
+.ps-profile-scope .ps-profile-card-body {
+    padding: 24px;
+}
+
+/* Form Isolation */
+.ps-profile-scope .ps-profile-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ps-profile-scope .ps-profile-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.ps-profile-scope .ps-profile-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ps-profile-scope .ps-profile-group label {
+    font-size: 13px;
+    color: #0f172a;
+    font-weight: 500;
+}
+
+.ps-profile-scope .ps-profile-group input {
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    transition: border 0.2s;
+    background: #fff;
+    color: #0f172a;
+}
+
+.ps-profile-scope .ps-profile-group input:focus {
+    border-color: #2dd4bf;
+}
+
+.ps-profile-scope .ps-profile-readonly {
+    background: #f8fafc !important;
+    color: #64748b !important;
+    cursor: not-allowed;
+}
+
+/* Button Isolation */
+.ps-profile-scope .ps-profile-submit-btn {
+    background: #0f172a;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background 0.2s;
+    align-self: flex-start;
+}
+
+.ps-profile-scope .ps-profile-submit-btn:hover {
+    background: #1e293b;
+}
+
+.ps-profile-scope .ps-profile-submit-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+/* Spinner Animation */
+.ps-profile-scope .ps-profile-spinner {
+    animation: ps-prof-spin 1s linear infinite;
+}
+
+@keyframes ps-prof-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}

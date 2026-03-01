@@ -1,0 +1,49 @@
+/* Layout and Sidebar */
+.ps-dashboard-layout { display: flex; min-height: 100vh; background: #f9fafb; font-family: sans-serif; }
+.ps-sidebar { width: 260px; background: #0f172a; color: #fff; padding: 24px 16px; display: flex; flex-direction: column; }
+.ps-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 40px; padding: 0 8px; }
+.ps-brand-name { font-weight: 700; font-size: 19px; }
+.ps-nav-label { font-size: 11px; color: #64748b; font-weight: 600; margin-bottom: 12px; letter-spacing: 0.05em; }
+.ps-nav-link { display: flex; align-items: center; padding: 12px; color: #94a3b8; text-decoration: none; border-radius: 8px; font-size: 14px; margin-bottom: 4px; transition: 0.2s; }
+.ps-nav-link:hover { background: rgba(255,255,255,0.05); color: #fff; }
+.ps-nav-link.active { background: rgba(30,41,59,0.8); color: #2dd4bf; position: relative; }
+.ps-chevron { margin-left: auto; font-size: 18px; opacity: 0.5; }
+
+/* User Profile in Sidebar */
+.ps-sidebar-footer { margin-top: auto; }
+.ps-user-card { display: flex; align-items: center; gap: 10px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 12px; margin-bottom: 12px; }
+.ps-user-avatar { width: 36px; height: 36px; background: #2dd4bf; color: #0f172a; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
+.ps-user-name { font-size: 13px; font-weight: 600; margin: 0; }
+.ps-user-email { font-size: 11px; color: #64748b; margin: 0; }
+.ps-btn-logout { background: none; border: none; color: #94a3b8; width: 100%; text-align: left; padding: 8px; cursor: pointer; font-size: 14px; }
+
+/* Main Content Area */
+.ps-main-content { flex: 1; display: flex; flex-direction: column; }
+.ps-top-bar { height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 40px; background: #fff; border-bottom: 1px solid #eef2f6; }
+.ps-role-badge { background: #f0fdfa; color: #0d9488; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.ps-page-container { padding: 40px; max-width: 1200px; }
+.ps-page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; }
+.ps-view-title { font-size: 28px; font-weight: 700; color: #0f172a; margin: 0; }
+.ps-view-subtitle { color: #64748b; margin-top: 4px; }
+
+/* Table and Card Styling */
+.ps-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+.ps-table { width: 100%; border-collapse: collapse; }
+.ps-table th { text-align: left; padding: 14px 24px; color: #64748b; font-size: 12px; font-weight: 600; text-transform: uppercase; border-bottom: 1px solid #f1f5f9; }
+.ps-table-row { border-bottom: 1px solid #f1f5f9; transition: 0.2s; }
+.ps-table-row:hover { background: #f8fafc; }
+.ps-td-main { padding: 18px 24px; font-size: 14px; font-weight: 500; color: #0f172a; max-width: 320px; }
+.ps-td-muted { padding: 18px 24px; color: #64748b; font-size: 14px; }
+
+/* Badges and Buttons */
+.ps-badge { padding: 4px 12px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+.ps-badge-done { background: #dcfce7; color: #166534; }
+.ps-badge-failed { background: #fee2e2; color: #991b1b; }
+.ps-badge-queued { background: #f1f5f9; color: #475569; }
+
+.ps-btn-outline { background: #fff; border: 1px solid #e2e8f0; padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+.ps-btn-ghost { text-decoration: none; color: #64748b; font-weight: 600; font-size: 13px; padding: 6px 12px; border-radius: 6px; }
+.ps-btn-ghost:hover { background: #f1f5f9; color: #0f172a; }
+
+.text-right { text-align: right; }
+.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -23,26 +23,24 @@ export default function Register() {
     e.preventDefault();
     setError('');
     
-    if (form.password !== form.confirm) { 
-      setError('Passwords do not match'); 
-      return; 
+    if (form.password !== form.confirm) {
+      setError('Passwords do not match');
+      return;
     }
-    if (form.password.length < 6) { 
-      setError('Password must be at least 6 characters'); 
-      return; 
+    if (form.password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
     }
     
     setLoading(true);
     
-    // FIX: Map the local 'password' state to 'password1' and 'password2' 
-    // to satisfy the Django dj-rest-auth registration requirement.
-    const res = await register({ 
-      first_name: form.firstName, 
-      last_name: form.lastName, 
-      email: form.email, 
+    const res = await register({
+      first_name: form.firstName,
+      last_name: form.lastName,
+      email: form.email,
       username: form.email,
-      password1: form.password, // Correct field name for backend
-      password2: form.password  // Correct field name for backend
+      password1: form.password, 
+      password2: form.password  
     });
     
     setLoading(false);
@@ -76,7 +74,7 @@ export default function Register() {
           setLoading(false);
           
           if (res.success) {
-            navigate('/login'); 
+            navigate('/dashboard'); 
           } else {
             setError(res.error || 'Google Login failed on server.');
           }
@@ -105,32 +103,38 @@ export default function Register() {
 
         {error && <div className="ps-register-error">{error}</div>}
 
-        <form onSubmit={handleSubmit} className="ps-register-form">
+        {/* FIXED: Added autoComplete="off" and hidden dummy fields to block browser autofill */}
+        <form onSubmit={handleSubmit} className="ps-register-form" autoComplete="off">
+          <input type="text" style={{display: 'none'}} />
+          <input type="password" style={{display: 'none'}} />
+
           <div className="ps-register-grid">
             <div className="ps-field">
               <label htmlFor="fn" className="ps-label">First Name</label>
               <div className="ps-input-wrapper">
                 <User className="ps-input-icon" size={16} />
-                <input 
-                  id="fn" 
-                  className="ps-input has-icon" 
-                  placeholder="Jane" 
-                  value={form.firstName} 
-                  onChange={update('firstName')} 
-                  required 
+                <input
+                  id="fn"
+                  className="ps-input has-icon"
+                  placeholder="Jane"
+                  value={form.firstName}
+                  onChange={update('firstName')}
+                  autoComplete="off"
+                  required
                 />
               </div>
             </div>
 
             <div className="ps-field">
               <label htmlFor="ln" className="ps-label">Last Name</label>
-              <input 
-                id="ln" 
-                className="ps-input" 
-                placeholder="Doe" 
-                value={form.lastName} 
-                onChange={update('lastName')} 
-                required 
+              <input
+                id="ln"
+                className="ps-input"
+                placeholder="Doe"
+                value={form.lastName}
+                onChange={update('lastName')}
+                autoComplete="off"
+                required
               />
             </div>
           </div>
@@ -139,14 +143,15 @@ export default function Register() {
             <label htmlFor="email" className="ps-label">Email</label>
             <div className="ps-input-wrapper">
               <Mail className="ps-input-icon" size={16} />
-              <input 
-                id="email" 
-                type="email" 
-                className="ps-input has-icon" 
-                placeholder="you@example.com" 
-                value={form.email} 
-                onChange={update('email')} 
-                required 
+              <input
+                id="email"
+                type="email"
+                className="ps-input has-icon"
+                placeholder="you@example.com"
+                value={form.email}
+                onChange={update('email')}
+                autoComplete="off"
+                required
               />
             </div>
           </div>
@@ -155,33 +160,35 @@ export default function Register() {
             <label htmlFor="pw" className="ps-label">Password</label>
             <div className="ps-input-wrapper">
               <Lock className="ps-input-icon" size={16} />
-              <input 
-                id="pw" 
-                type="password" 
-                className="ps-input has-icon" 
-                placeholder="Min 6 characters" 
-                value={form.password} 
-                onChange={update('password')} 
-                required 
+              <input
+                id="pw"
+                type="password"
+                className="ps-input has-icon"
+                placeholder="Min 6 characters"
+                value={form.password}
+                onChange={update('password')}
+                autoComplete="new-password"
+                required
               />
             </div>
           </div>
 
           <div className="ps-field">
             <label htmlFor="cpw" className="ps-label">Confirm Password</label>
-            <input 
-              id="cpw" 
-              type="password" 
-              className="ps-input" 
-              placeholder="••••••••" 
-              value={form.confirm} 
-              onChange={update('confirm')} 
-              required 
+            <input
+              id="cpw"
+              type="password"
+              className="ps-input"
+              placeholder="••••••••"
+              value={form.confirm}
+              onChange={update('confirm')}
+              autoComplete="new-password"
+              required
             />
           </div>
 
           <button type="submit" className="ps-btn ps-btn-primary" disabled={loading}>
-            {loading && <Loader2 className="ps-spin" size={16} />} 
+            {loading && <Loader2 className="ps-spin" size={16} />}
             Create Account
           </button>
         </form>

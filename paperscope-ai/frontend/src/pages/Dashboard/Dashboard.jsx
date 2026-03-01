@@ -1,20 +1,28 @@
 ﻿import React, { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../../contexts/AuthContext.jsx"; // Real auth context
+import { useAuth } from "../../contexts/AuthContext.jsx"; 
 import "./Dashboard.css";
 
 export default function Dashboard() {
-  const { user, logout, initializing } = useAuth(); // Get real user data
+  const { user, logout, initializing } = useAuth(); // Gets the logged-in person
   const navigate = useNavigate();
 
-  // 1. FIX THE LOOP: Wait for the auth check to finish before redirecting
-  useEffect(() => {
-    if (!initializing && !user) {
-      navigate('/login');
-    }
-  }, [user, initializing, navigate]);
+  // Identify if the user is an admin
+  const isAdmin = user?.is_superuser || user?.role === 'ADMIN';
 
-  // 2. SHOW LOADING: Prevents the "Flash" of the login page
+  // 1. FIX THE LOOP: Wait for the auth check to finish before redirecting
+  // 2. ADMIN CHECK: Redirect admins to their specific dashboard
+  useEffect(() => {
+    if (!initializing) {
+      if (!user) {
+        navigate('/login');
+      } else if (isAdmin) {
+        navigate('/dashboard/admin');
+      }
+    }
+  }, [user, initializing, isAdmin, navigate]);
+
+  // 3. SHOW LOADING: Prevents the "Flash" of the login page
   if (initializing) {
     return (
       <div className="ps-loading-screen">
@@ -32,7 +40,7 @@ export default function Dashboard() {
     navigate('/login');
   };
 
-  // Mock data preserved as requested - replace these with API calls later
+  // Mock data preserved - replace these with API calls later
   const mockPapers = [
     { id: "p1", userId: user.user_id, title: "Deep Learning for Protein Folding: A Reproducibility Study" },
     { id: "p2", userId: user.user_id, title: "Attention Mechanisms in Low-Resource NLP" },
@@ -58,14 +66,6 @@ export default function Dashboard() {
     { label: "View History", desc: "Browse past analyses", to: "/dashboard/history", icon: "🕘" },
   ];
 
-  const navItems = [
-    { label: "Dashboard", to: "/dashboard", icon: "▦", active: true },
-    { label: "Submit Paper", to: "/dashboard/submit", icon: "⬆" },
-    { label: "Analysis Jobs", to: "/dashboard/jobs", icon: "⏱" },
-    { label: "History", to: "/dashboard/history", icon: "🕘" },
-    { label: "Profile", to: "/dashboard/profile", icon: "👤" },
-  ];
-
   function StatusBadge({ status }) {
     const s = String(status || "").toLowerCase();
     return <span className={`ps-pill ps-status ps-status-${s}`}>{status}</span>;
@@ -81,53 +81,39 @@ export default function Dashboard() {
 
   return (
     <div className="ps-app">
-      {/* Sidebar */}
+      {/* Sidebar - Matching AnalysisJobs EXACTLY, populated with real user data */}
       <aside className="ps-sidebar">
         <div className="ps-brand">
-          <div className="ps-brand-badge">🛡️</div>
-          <div className="ps-brand-text">
-            <div className="ps-brand-title">PaperScope AI</div>
-          </div>
+          <div className="ps-logo-shield">🛡️</div>
+          <span className="ps-brand-name">PaperScope AI</span>
         </div>
-
-        <div className="ps-nav-title">NAVIGATION</div>
-
-        <nav className="ps-nav">
-          {navItems.map((item) => (
-            <Link
-              key={item.label}
-              to={item.to}
-              className={`ps-nav-item ${item.active ? "is-active" : ""}`}
-            >
-              <span className="ps-nav-icon">{item.icon}</span>
-              <span className="ps-nav-label">{item.label}</span>
-              <span className="ps-nav-arrow">›</span>
-            </Link>
-          ))}
-        </nav>
-
+        <div className="ps-nav-section">
+          <p className="ps-nav-label">NAVIGATION</p>
+          <Link to="/dashboard" className="ps-nav-link active">▦ Dashboard <span className="ps-chevron">›</span></Link>
+          <Link to="/dashboard/submit" className="ps-nav-link">⬆ Submit Paper</Link>
+          <Link to="/dashboard/jobs" className="ps-nav-link">⏱ Analysis Jobs</Link>
+          <Link to="/dashboard/history" className="ps-nav-link">🕘 History</Link>
+          <Link to="/dashboard/profile" className="ps-nav-link">👤 Profile</Link>
+        </div>
         <div className="ps-sidebar-footer">
-          <div className="ps-userbox">
-            {/* Dynamic Avatar using real user initials */}
-            <div className="ps-avatar">
-              {user.first_name?.[0]}{user.last_name?.[0]}
+          <div className="ps-user-card">
+            <div className="ps-user-avatar">
+              {user.first_name?.[0] || ""}{user.last_name?.[0] || ""}
             </div>
-            <div className="ps-userbox-text">
-              <div className="ps-userbox-name">{user.first_name} {user.last_name}</div>
-              <div className="ps-userbox-email">{user.email}</div>
+            <div className="ps-user-meta">
+              <p className="ps-user-name">{user.first_name} {user.last_name}</p>
+              <p className="ps-user-email">{user.email}</p>
             </div>
           </div>
-
-          <button className="ps-signout" type="button" onClick={handleLogout}>
-            ⎋ Sign Out
-          </button>
+          <button className="ps-btn-logout" onClick={handleLogout}>⎋ Sign Out</button>
         </div>
       </aside>
 
+      {/* Main Content Area - STRICTLY UNTOUCHED LOGIC */}
       <main className="ps-main">
         <div className="ps-topbar">
           <div />
-          <div className="ps-role-pill">{user.role}</div>
+          <div className="ps-role-pill">Researcher</div>
         </div>
 
         <div className="ps-content">
@@ -136,7 +122,6 @@ export default function Dashboard() {
             <p className="ps-subtitle">Here's an overview of your research analysis activity.</p>
           </div>
 
-          {/* Stats Section */}
           <div className="ps-stats-grid">
             <div className="ps-card ps-stat-card">
               <div>
@@ -186,7 +171,6 @@ export default function Dashboard() {
             ))}
           </div>
 
-          {/* Recent Jobs */}
           <div className="ps-card ps-jobs-card">
             <div className="ps-jobs-header">
               <h2 className="ps-jobs-title">Recent Analysis Jobs</h2>

@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { Shield, Mail, Lock, Loader2 } from 'lucide-react';
@@ -13,36 +13,65 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Load the Google GSI script when the component mounts
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     
-    // FIX: Pass as an OBJECT (dictionary) to match AuthContext and Backend expectations
-    const res = await login({ 
-      email: email, 
-      password: password 
+    const res = await login({
+      email: email,
+      password: password
     });
     
     setLoading(false);
     
     if (res.success) {
-      // Based on your Dashboard.jsx route, we navigate directly to /dashboard
       navigate('/dashboard');
     } else {
-      // Handles cases where backend returns specific error messages
       setError(res.error || 'Login failed. Please check your credentials.');
     }
   };
 
-  const handleGoogle = async () => {
+  const handleGoogle = () => {
     setError('');
-    // Ensure you handle the Google login flow properly if you use a popup or redirect
-    setLoading(true);
-    const res = await googleLogin(); 
-    setLoading(false);
-    if (res.success) navigate('/dashboard');
-    else setError(res.error || 'Google Login failed');
+    if (!window.google) {
+      setError('Google script is still loading. Please wait a second and try again.');
+      return;
+    }
+
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      scope: 'email profile',
+      callback: async (response) => {
+        if (response.error) {
+          setError(`Google login failed: ${response.error}`);
+          return;
+        }
+        
+        if (response.access_token) {
+          setLoading(true);
+          const res = await googleLogin(response.access_token);
+          setLoading(false);
+          
+          if (res.success) {
+            navigate('/dashboard');
+          } else {
+            setError(res.error || 'Google Login failed on server.');
+          }
+        }
+      },
+    });
+    
+    client.requestAccessToken();
   };
 
   return (
@@ -61,20 +90,24 @@ export default function Login() {
 
         {error && <div className="ps-register-error">{error}</div>}
 
-        <form onSubmit={handleSubmit} className="ps-register-form">
-          
+        {/* FIXED: Added autoComplete="off" and hidden dummy fields to block browser autofill */}
+        <form onSubmit={handleSubmit} className="ps-register-form" autoComplete="off">
+          <input type="text" style={{display: 'none'}} />
+          <input type="password" style={{display: 'none'}} />
+
           <div className="ps-field">
             <label htmlFor="email" className="ps-label">Email</label>
             <div className="ps-input-wrapper">
               <Mail className="ps-input-icon" size={16} />
-              <input 
-                id="email" 
-                type="email" 
-                className="ps-input has-icon" 
-                placeholder="you@example.com" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                required 
+              <input
+                id="email"
+                type="email"
+                className="ps-input has-icon"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="off"
+                required
               />
             </div>
           </div>
@@ -86,20 +119,21 @@ export default function Login() {
             </div>
             <div className="ps-input-wrapper">
               <Lock className="ps-input-icon" size={16} />
-              <input 
-                id="password" 
-                type="password" 
-                className="ps-input has-icon" 
-                placeholder="••••••••" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
-                required 
+              <input
+                id="password"
+                type="password"
+                className="ps-input has-icon"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                required
               />
             </div>
           </div>
 
           <button type="submit" className="ps-btn ps-btn-primary" disabled={loading}>
-            {loading && <Loader2 className="ps-spin" size={16} />} 
+            {loading && <Loader2 className="ps-spin" size={16} />}
             Sign In
           </button>
         </form>

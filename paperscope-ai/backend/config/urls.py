@@ -9,11 +9,13 @@ from django.http import JsonResponse
 # Root / Health Check
 # --------------------------------------------------
 def health(request):
-    return JsonResponse({
-        "status": "ok",
-        "service": "PaperScope AI Backend",
-        "version": "v1"
-    })
+    return JsonResponse(
+        {
+            "status": "ok",
+            "service": "PaperScope AI Backend",
+            "version": "v1",
+        }
+    )
 
 
 # --------------------------------------------------
@@ -26,8 +28,8 @@ urlpatterns = [
     # Django admin
     path("admin/", admin.site.urls),
 
-    # --- 1. ADDED THIS LINE TO FIX THE GOOGLE CRASH ---
-    path('accounts/', include('allauth.urls')), 
+    # Allauth routes (needed for Google / social auth flows)
+    path("accounts/", include("allauth.urls")),
 
     # Authentication (dj-rest-auth)
     path("api/auth/", include("dj_rest_auth.urls")),
@@ -44,7 +46,4 @@ urlpatterns = [
 # Media files (DEV only)
 # --------------------------------------------------
 if settings.DEBUG:
-    urlpatterns += static(
-        settings.MEDIA_URL,
-        document_root=settings.MEDIA_ROOT,
-    )
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

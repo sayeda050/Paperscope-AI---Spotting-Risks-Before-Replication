@@ -11,6 +11,7 @@ import ResetPassword from "../pages/Auth/ResetPassword.jsx";
 
 // Main pages
 import Dashboard from "../pages/Dashboard/Dashboard.jsx";
+import SubmitPaper from "../pages/Dashboard/SubmitPaper.jsx";
 import Profile from "../pages/Dashboard/Profile.jsx";
 import AnalysisJobs from "../pages/Analysis/AnalysisJobs.jsx";
 import AnalysisResult from "../pages/Analysis/AnalysisResult.jsx";
@@ -86,6 +87,14 @@ export default function AppRoutes() {
         element={
           <PrivateRoute>
             <Dashboard />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/submit-paper"
+        element={
+          <PrivateRoute>
+            <SubmitPaper />
           </PrivateRoute>
         }
       />

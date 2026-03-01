@@ -1,8 +1,13 @@
 import React, { useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext.jsx';
 import { Upload, Link as LinkIcon, FileText, X } from 'lucide-react';
 import './SubmitPaper.css';
 
 export default function SubmitPaper() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
   const [activeTab, setActiveTab] = useState('pdf');
   const [paperTitle, setPaperTitle] = useState('');
   const [arxivLink, setArxivLink] = useState('');
@@ -11,6 +16,11 @@ export default function SubmitPaper() {
   const [loading, setLoading] = useState(false);
 
   const fileInputRef = useRef(null);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   const handleFileChange = (file) => {
     if (!file) return;
@@ -65,13 +75,6 @@ export default function SubmitPaper() {
     setLoading(true);
 
     try {
-      // Replace with your real backend API later
-      // Example:
-      // const formData = new FormData();
-      // formData.append('title', paperTitle);
-      // formData.append('file', selectedFile);
-      // await submitPaper(formData);
-
       await new Promise((resolve) => setTimeout(resolve, 1200));
       alert('Paper submitted for analysis successfully.');
     } catch (error) {
@@ -92,10 +95,6 @@ export default function SubmitPaper() {
     setLoading(true);
 
     try {
-      // Replace with your real backend API later
-      // Example:
-      // await submitArxiv({ url: arxivLink });
-
       await new Promise((resolve) => setTimeout(resolve, 1200));
       alert('arXiv paper submitted for analysis successfully.');
     } catch (error) {
@@ -106,135 +105,196 @@ export default function SubmitPaper() {
   };
 
   return (
-    <div className="submit-paper-page">
-      <div className="submit-paper-topbar">
-        <span className="submit-paper-role">Researcher</span>
-      </div>
+    <div className="submit-layout">
+      <aside className="submit-sidebar">
+        <div>
+          <div className="submit-brand">
+            <div className="submit-brand-icon">🛡️</div>
+            <span className="submit-brand-name">PaperScope AI</span>
+          </div>
 
-      <div className="submit-paper-content">
-        <div className="submit-paper-header">
-          <h1>Submit Paper</h1>
-          <p>Upload a PDF or provide an arXiv link to start analysis.</p>
+          <div className="submit-nav-section">
+            <p className="submit-nav-title">NAVIGATION</p>
+
+            <Link to="/dashboard" className="submit-nav-link">
+              <span className="submit-nav-icon">▦</span>
+              <span>Dashboard</span>
+            </Link>
+
+            <Link to="/submit-paper" className="submit-nav-link active">
+              <span className="submit-nav-icon">⤴</span>
+              <span>Submit Paper</span>
+              <span className="submit-nav-arrow">›</span>
+            </Link>
+
+            <Link to="/analysis/jobs" className="submit-nav-link">
+              <span className="submit-nav-icon">◔</span>
+              <span>Analysis Jobs</span>
+            </Link>
+
+            <Link to="/history" className="submit-nav-link">
+              <span className="submit-nav-icon">◔</span>
+              <span>History</span>
+            </Link>
+
+            <Link to="/profile" className="submit-nav-link">
+              <span className="submit-nav-icon">◔</span>
+              <span>Profile</span>
+            </Link>
+          </div>
         </div>
 
-        <div className="submit-paper-tabs">
-          <button
-            className={`submit-tab ${activeTab === 'pdf' ? 'active' : ''}`}
-            onClick={() => setActiveTab('pdf')}
-            type="button"
-          >
-            <Upload size={16} />
-            <span>Upload PDF</span>
-          </button>
+        <div className="submit-sidebar-footer">
+          <div className="submit-user-box">
+            <div className="submit-user-avatar">
+              {user?.first_name?.[0] || ''}
+              {user?.last_name?.[0] || ''}
+            </div>
+            <div className="submit-user-meta">
+              <p className="submit-user-name">
+                {user?.first_name} {user?.last_name}
+              </p>
+              <p className="submit-user-email">{user?.email}</p>
+            </div>
+          </div>
 
-          <button
-            className={`submit-tab ${activeTab === 'arxiv' ? 'active' : ''}`}
-            onClick={() => setActiveTab('arxiv')}
-            type="button"
-          >
-            <LinkIcon size={16} />
-            <span>arXiv Link</span>
+          <button className="submit-signout-btn" onClick={handleLogout}>
+            ⎋ Sign Out
           </button>
         </div>
+      </aside>
 
-        {activeTab === 'pdf' ? (
-          <div className="submit-card">
-            <h2>Upload Research Paper</h2>
-            <p className="submit-card-subtitle">Supported format: PDF (max 50MB)</p>
+      <main className="submit-main">
+        <div className="submit-topbar">
+          <div />
+          <div className="submit-role-pill">Researcher</div>
+        </div>
 
-            <form onSubmit={handlePdfSubmit} className="submit-form">
-              <label htmlFor="paperTitle">Paper Title (optional)</label>
-              <input
-                id="paperTitle"
-                type="text"
-                placeholder="Auto-detected from PDF if empty"
-                value={paperTitle}
-                onChange={(e) => setPaperTitle(e.target.value)}
-              />
+        <div className="submit-page-content">
+          <div className="submit-paper-header">
+            <h1>Submit Paper</h1>
+            <p>Upload a PDF or provide an arXiv link to start analysis.</p>
+          </div>
 
-              <label>PDF File</label>
+          <div className="submit-paper-tabs">
+            <button
+              className={`submit-tab ${activeTab === 'pdf' ? 'active' : ''}`}
+              onClick={() => setActiveTab('pdf')}
+              type="button"
+            >
+              <Upload size={16} />
+              <span>Upload PDF</span>
+            </button>
 
-              <div
-                className={`upload-dropzone ${dragActive ? 'drag-active' : ''}`}
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragActive(true);
-                }}
-                onDragLeave={() => setDragActive(false)}
-                onDrop={onDrop}
-              >
+            <button
+              className={`submit-tab ${activeTab === 'arxiv' ? 'active' : ''}`}
+              onClick={() => setActiveTab('arxiv')}
+              type="button"
+            >
+              <LinkIcon size={16} />
+              <span>arXiv Link</span>
+            </button>
+          </div>
+
+          {activeTab === 'pdf' ? (
+            <div className="submit-card">
+              <h2>Upload Research Paper</h2>
+              <p className="submit-card-subtitle">Supported format: PDF (max 50MB)</p>
+
+              <form onSubmit={handlePdfSubmit} className="submit-form">
+                <label htmlFor="paperTitle">Paper Title (optional)</label>
                 <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="application/pdf"
-                  onChange={onInputFileChange}
-                  hidden
+                  id="paperTitle"
+                  type="text"
+                  placeholder="Auto-detected from PDF if empty"
+                  value={paperTitle}
+                  onChange={(e) => setPaperTitle(e.target.value)}
                 />
 
-                {!selectedFile ? (
-                  <>
-                    <FileText className="upload-file-icon" size={52} />
-                    <p className="upload-main-text">Click to select or drag & drop</p>
-                    <span className="upload-sub-text">PDF files only</span>
-                  </>
-                ) : (
-                  <div className="selected-file-box">
-                    <div className="selected-file-left">
-                      <FileText size={22} />
-                      <div>
-                        <p className="selected-file-name">{selectedFile.name}</p>
-                        <span className="selected-file-size">
-                          {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
-                        </span>
+                <label>PDF File</label>
+
+                <div
+                  className={`upload-dropzone ${dragActive ? 'drag-active' : ''}`}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragActive(true);
+                  }}
+                  onDragLeave={() => setDragActive(false)}
+                  onDrop={onDrop}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/pdf"
+                    onChange={onInputFileChange}
+                    hidden
+                  />
+
+                  {!selectedFile ? (
+                    <>
+                      <FileText className="upload-file-icon" size={52} />
+                      <p className="upload-main-text">Click to select or drag & drop</p>
+                      <span className="upload-sub-text">PDF files only</span>
+                    </>
+                  ) : (
+                    <div className="selected-file-box">
+                      <div className="selected-file-left">
+                        <FileText size={22} />
+                        <div>
+                          <p className="selected-file-name">{selectedFile.name}</p>
+                          <span className="selected-file-size">
+                            {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                          </span>
+                        </div>
                       </div>
+
+                      <button
+                        type="button"
+                        className="remove-file-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFile();
+                        }}
+                      >
+                        <X size={18} />
+                      </button>
                     </div>
+                  )}
+                </div>
 
-                    <button
-                      type="button"
-                      className="remove-file-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeFile();
-                      }}
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                )}
-              </div>
+                <button className="submit-analysis-btn" type="submit" disabled={loading}>
+                  <Upload size={16} />
+                  <span>{loading ? 'Submitting...' : 'Submit for Analysis'}</span>
+                </button>
+              </form>
+            </div>
+          ) : (
+            <div className="submit-card">
+              <h2>Submit via arXiv Link</h2>
+              <p className="submit-card-subtitle">
+                Paste the arXiv abstract or PDF link to analyze the paper
+              </p>
 
-              <button className="submit-analysis-btn" type="submit" disabled={loading}>
-                <Upload size={16} />
-                <span>{loading ? 'Submitting...' : 'Submit for Analysis'}</span>
-              </button>
-            </form>
-          </div>
-        ) : (
-          <div className="submit-card">
-            <h2>Submit via arXiv Link</h2>
-            <p className="submit-card-subtitle">
-              Paste the arXiv abstract or PDF link to analyze the paper
-            </p>
+              <form onSubmit={handleArxivSubmit} className="submit-form">
+                <label htmlFor="arxivLink">arXiv URL</label>
+                <input
+                  id="arxivLink"
+                  type="url"
+                  placeholder="https://arxiv.org/abs/1234.56789"
+                  value={arxivLink}
+                  onChange={(e) => setArxivLink(e.target.value)}
+                />
 
-            <form onSubmit={handleArxivSubmit} className="submit-form">
-              <label htmlFor="arxivLink">arXiv URL</label>
-              <input
-                id="arxivLink"
-                type="url"
-                placeholder="https://arxiv.org/abs/1234.56789"
-                value={arxivLink}
-                onChange={(e) => setArxivLink(e.target.value)}
-              />
-
-              <button className="submit-analysis-btn" type="submit" disabled={loading}>
-                <LinkIcon size={16} />
-                <span>{loading ? 'Submitting...' : 'Analyze arXiv Paper'}</span>
-              </button>
-            </form>
-          </div>
-        )}
-      </div>
+                <button className="submit-analysis-btn" type="submit" disabled={loading}>
+                  <LinkIcon size={16} />
+                  <span>{loading ? 'Submitting...' : 'Analyze arXiv Paper'}</span>
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }

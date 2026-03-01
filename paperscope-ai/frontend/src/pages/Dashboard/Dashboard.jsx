@@ -1,20 +1,18 @@
 ﻿﻿import React, { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../../contexts/AuthContext.jsx"; 
+import { useAuth } from "../../contexts/AuthContext.jsx";
 import "./Dashboard.css";
 
 export default function Dashboard() {
-  const { user, logout, initializing } = useAuth(); // Gets the logged-in person
+  const { user, logout, initializing } = useAuth();
   const navigate = useNavigate();
 
-  // 1. FIX THE LOOP: Wait for the auth check to finish before redirecting
   useEffect(() => {
     if (!initializing && !user) {
-      navigate('/login');
+      navigate("/login");
     }
   }, [user, initializing, navigate]);
 
-  // 2. SHOW LOADING: Prevents the "Flash" of the login page
   if (initializing) {
     return (
       <div className="ps-loading-screen">
@@ -24,15 +22,13 @@ export default function Dashboard() {
     );
   }
 
-  // Safety check
   if (!user) return null;
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate("/login");
   };
 
-  // Mock data preserved - replace these with API calls later
   const mockPapers = [
     { id: "p1", userId: user.user_id, title: "Deep Learning for Protein Folding: A Reproducibility Study" },
     { id: "p2", userId: user.user_id, title: "Attention Mechanisms in Low-Resource NLP" },
@@ -53,9 +49,9 @@ export default function Dashboard() {
   const failed = mockJobs.filter((j) => j.status === "FAILED").length;
 
   const quickActions = [
-    { label: "Upload PDF", desc: "Submit a paper for analysis", to: "/dashboard/submit", icon: "⬆️" },
-    { label: "Analyze arXiv", desc: "Analyze by arXiv link or ID", to: "/dashboard/submit", icon: "🔎" },
-    { label: "View History", desc: "Browse past analyses", to: "/dashboard/history", icon: "🕘" },
+    { label: "Upload PDF", desc: "Submit a paper for analysis", to: "/submit-paper", icon: "⬆️" },
+    { label: "Analyze arXiv", desc: "Analyze by arXiv link or ID", to: "/submit-paper", icon: "🔎" },
+    { label: "View History", desc: "Browse past analyses", to: "/history", icon: "🕘" },
   ];
 
   function StatusBadge({ status }) {
@@ -73,20 +69,21 @@ export default function Dashboard() {
 
   return (
     <div className="ps-app">
-      {/* Sidebar - Matching AnalysisJobs EXACTLY, populated with real user data */}
       <aside className="ps-sidebar">
         <div className="ps-brand">
           <div className="ps-logo-shield">🛡️</div>
           <span className="ps-brand-name">PaperScope AI</span>
         </div>
+
         <div className="ps-nav-section">
           <p className="ps-nav-label">NAVIGATION</p>
           <Link to="/dashboard" className="ps-nav-link active">▦ Dashboard <span className="ps-chevron">›</span></Link>
-          <Link to="/dashboard/submit" className="ps-nav-link">⬆ Submit Paper</Link>
-          <Link to="/dashboard/jobs" className="ps-nav-link">⏱ Analysis Jobs</Link>
-          <Link to="/dashboard/history" className="ps-nav-link">🕘 History</Link>
-          <Link to="/dashboard/profile" className="ps-nav-link">👤 Profile</Link>
+          <Link to="/submit-paper" className="ps-nav-link">⬆ Submit Paper</Link>
+          <Link to="/analysis/jobs" className="ps-nav-link">⏱ Analysis Jobs</Link>
+          <Link to="/history" className="ps-nav-link">🕘 History</Link>
+          <Link to="/profile" className="ps-nav-link">👤 Profile</Link>
         </div>
+
         <div className="ps-sidebar-footer">
           <div className="ps-user-card">
             <div className="ps-user-avatar">
@@ -101,7 +98,6 @@ export default function Dashboard() {
         </div>
       </aside>
 
-      {/* Main Content Area - STRICTLY UNTOUCHED LOGIC */}
       <main className="ps-main">
         <div className="ps-topbar">
           <div />
@@ -166,7 +162,7 @@ export default function Dashboard() {
           <div className="ps-card ps-jobs-card">
             <div className="ps-jobs-header">
               <h2 className="ps-jobs-title">Recent Analysis Jobs</h2>
-              <Link className="ps-view-all" to="/dashboard/jobs">
+              <Link className="ps-view-all" to="/analysis/jobs">
                 View All
               </Link>
             </div>

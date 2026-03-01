@@ -23,3 +23,11 @@ export async function getMe() {
   const res = await http.get("/api/users/me/");
   return res.data;
 }
+
+// ==========================================
+// NEW ADDITION FOR GOOGLE LOGIN
+// ==========================================
+export async function googleLoginUser(payload) {
+  const res = await http.post("/api/users/google/", payload);
+  return res.data;
+}

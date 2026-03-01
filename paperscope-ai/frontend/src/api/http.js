@@ -1,33 +1,22 @@
 ﻿import axios from "axios";
 
-const baseURL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+// Updated to use localhost to match your browser's domain
+const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 export const http = axios.create({
   baseURL,
-  headers: { "Content-Type": "application/json" },
+  withCredentials: true, // MANDATORY: This allows the browser to send/receive cookies
+  headers: { 
+    "Content-Type": "application/json" 
+  },
 });
 
-// Attach token only when needed (skip login/register/logout endpoints)
+// We no longer need to manually attach tokens from localStorage 
+// because the browser handles the "paperscope-auth" cookie for us.
 http.interceptors.request.use((config) => {
-  const url = config.url || "";
-
-  const isAuthEndpoint =
-    url.includes("/api/auth/login/") ||
-    url.includes("/api/auth/logout/") ||
-    url.includes("/api/auth/registration/");
-
-  if (!isAuthEndpoint) {
-    const token =
-      localStorage.getItem("access_token") ||
-      localStorage.getItem("token");
-
-    if (token) {
-      // dj-rest-auth default token auth uses: "Token <token>"
-      config.headers.Authorization = `Token ${token}`;
-    }
-  }
-
   return config;
+}, (error) => {
+  return Promise.reject(error);
 });
 
 export default http;

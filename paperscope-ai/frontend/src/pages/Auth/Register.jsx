@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { Shield, Mail, Lock, User, Loader2 } from 'lucide-react';
@@ -10,6 +10,14 @@ export default function Register() {
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', confirm: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -25,12 +33,18 @@ export default function Register() {
     }
     
     setLoading(true);
+    
+    // FIX: Map the local 'password' state to 'password1' and 'password2' 
+    // to satisfy the Django dj-rest-auth registration requirement.
     const res = await register({ 
-      firstName: form.firstName, 
-      lastName: form.lastName, 
+      first_name: form.firstName, 
+      last_name: form.lastName, 
       email: form.email, 
-      password: form.password 
+      username: form.email,
+      password1: form.password, // Correct field name for backend
+      password2: form.password  // Correct field name for backend
     });
+    
     setLoading(false);
     
     if (res.success) {
@@ -40,11 +54,37 @@ export default function Register() {
     }
   };
 
-  const handleGoogle = async () => {
-    setLoading(true);
-    const res = await googleLogin();
-    setLoading(false);
-    if (res.success) navigate('/dashboard');
+  const handleGoogle = () => {
+    setError('');
+    if (!window.google) {
+      setError('Google script is still loading. Please wait a second and try again.');
+      return;
+    }
+
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      scope: 'email profile',
+      callback: async (response) => {
+        if (response.error) {
+          setError(`Google login failed: ${response.error}`);
+          return;
+        }
+        
+        if (response.access_token) {
+          setLoading(true);
+          const res = await googleLogin(response.access_token);
+          setLoading(false);
+          
+          if (res.success) {
+            navigate('/login'); 
+          } else {
+            setError(res.error || 'Google Login failed on server.');
+          }
+        }
+      },
+    });
+    
+    client.requestAccessToken();
   };
 
   const update = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
@@ -53,22 +93,18 @@ export default function Register() {
     <div className="ps-register-page">
       <div className="ps-register-card">
         
-        {/* Brand Link */}
         <Link to="/" className="ps-register-brand">
           <Shield className="ps-brand-icon" size={32} />
           <span className="ps-brand-text">PaperScope AI</span>
         </Link>
 
-        {/* Header */}
         <div className="ps-register-header">
           <h1 className="ps-register-title">Create your account</h1>
           <p className="ps-register-subtitle">Start analyzing research papers today</p>
         </div>
 
-        {/* Error Alert */}
         {error && <div className="ps-register-error">{error}</div>}
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="ps-register-form">
           <div className="ps-register-grid">
             <div className="ps-field">
@@ -150,13 +186,11 @@ export default function Register() {
           </button>
         </form>
 
-        {/* Divider */}
         <div className="ps-divider">
           <div className="ps-divider-line"></div>
           <span className="ps-divider-text">or</span>
         </div>
 
-        {/* Google Login */}
         <button type="button" className="ps-btn ps-btn-outline" onClick={handleGoogle} disabled={loading}>
           <svg width="16" height="16" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
@@ -167,7 +201,6 @@ export default function Register() {
           Sign up with Google
         </button>
 
-        {/* Footer Link */}
         <p className="ps-register-footer">
           Already have an account? <Link to="/login" className="ps-link">Sign in</Link>
         </p>

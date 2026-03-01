@@ -1,11 +1,10 @@
 ﻿import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from "../../contexts/AuthContext.jsx"; // Adjust path if needed
+import { useAuth } from "../../contexts/AuthContext.jsx";
 import { Shield, Mail, Lock, Loader2 } from 'lucide-react';
 import './Login.css';
 
 export default function Login() {
-  // Using the login function from your AuthContext (or update to loginUser from api if preferred)
   const { login, googleLogin } = useAuth();
   const navigate = useNavigate();
   
@@ -19,45 +18,49 @@ export default function Login() {
     setError('');
     setLoading(true);
     
-    // Using your AuthContext login method
-    const res = await login(email, password);
+    // FIX: Pass as an OBJECT (dictionary) to match AuthContext and Backend expectations
+    const res = await login({ 
+      email: email, 
+      password: password 
+    });
+    
     setLoading(false);
     
     if (res.success) {
-      const stored = JSON.parse(localStorage.getItem('paperscope_user') || '{}');
-      navigate(stored.role === 'ADMIN' ? '/admin' : '/dashboard');
+      // Based on your Dashboard.jsx route, we navigate directly to /dashboard
+      navigate('/dashboard');
     } else {
+      // Handles cases where backend returns specific error messages
       setError(res.error || 'Login failed. Please check your credentials.');
     }
   };
 
   const handleGoogle = async () => {
+    setError('');
+    // Ensure you handle the Google login flow properly if you use a popup or redirect
     setLoading(true);
-    const res = await googleLogin();
+    const res = await googleLogin(); 
     setLoading(false);
     if (res.success) navigate('/dashboard');
+    else setError(res.error || 'Google Login failed');
   };
 
   return (
-    <div className="ps-register-page">
+    <div className="ps-register-page"> {/* Keeping your existing CSS class */}
       <div className="ps-register-card">
         
-        {/* Brand Link */}
         <Link to="/" className="ps-register-brand">
           <Shield className="ps-brand-icon" size={32} />
           <span className="ps-brand-text">PaperScope AI</span>
         </Link>
 
-        {/* Header */}
         <div className="ps-register-header">
           <h1 className="ps-register-title">Welcome back</h1>
           <p className="ps-register-subtitle">Sign in to your account to continue</p>
         </div>
 
-        {/* Error Alert */}
         {error && <div className="ps-register-error">{error}</div>}
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="ps-register-form">
           
           <div className="ps-field">
@@ -79,7 +82,7 @@ export default function Login() {
           <div className="ps-field">
             <div className="ps-label-row">
               <label htmlFor="password" className="ps-label">Password</label>
-              <Link to="/forgot-password" className="ps-forgot-link">Forgot password?</Link>
+              <Link to="/forgot-password" style={{ fontSize: '14px', color: '#0d9488', textDecoration: 'none' }}>Forgot password?</Link>
             </div>
             <div className="ps-input-wrapper">
               <Lock className="ps-input-icon" size={16} />
@@ -101,13 +104,11 @@ export default function Login() {
           </button>
         </form>
 
-        {/* Divider */}
         <div className="ps-divider">
           <div className="ps-divider-line"></div>
           <span className="ps-divider-text">or continue with</span>
         </div>
 
-        {/* Google Login */}
         <button type="button" className="ps-btn ps-btn-outline" onClick={handleGoogle} disabled={loading}>
           <svg width="16" height="16" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
@@ -118,12 +119,9 @@ export default function Login() {
           Google Sign In
         </button>
 
-        {/* Footer Link */}
         <p className="ps-register-footer">
           Don't have an account? <Link to="/register" className="ps-link">Create one</Link>
         </p>
-
-        
 
       </div>
     </div>

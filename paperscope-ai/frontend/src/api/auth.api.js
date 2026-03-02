@@ -2,13 +2,14 @@
 
 // dj-rest-auth endpoints
 export async function registerUser(payload) {
-  // expected: registration payload handled by backend serializer
+  // expected: { username, email, password1, password2 }
   const res = await http.post("/api/auth/registration/", payload);
   return res.data;
 }
 
 export async function loginUser(payload) {
-  // expected: login payload handled by backend auth setup
+  // expected: { username, password }
+  // (username can be email too if your backend supports it via allauth)
   const res = await http.post("/api/auth/login/", payload);
   return res.data;
 }
@@ -23,25 +24,17 @@ export async function getMe() {
   return res.data;
 }
 
-<<<<<<< HEAD
-// GOOGLE LOGIN
-=======
 // ==========================================
 // GOOGLE LOGIN
 // ==========================================
->>>>>>> Nusrat
 export async function googleLoginUser(payload) {
   const res = await http.post("/api/users/google/", payload);
   return res.data;
 }
 
-<<<<<<< HEAD
-// FORGOT / RESET PASSWORD
-=======
 // ==========================================
 // FORGOT / RESET PASSWORD
 // ==========================================
->>>>>>> Nusrat
 export async function forgotPassword(payload) {
   // expected: { email }
   const res = await http.post("/api/users/forgot-password/", payload);

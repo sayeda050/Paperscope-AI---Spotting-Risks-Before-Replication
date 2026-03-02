@@ -118,20 +118,12 @@ REST_FRAMEWORK = {
 }
 
 REST_AUTH = {
-<<<<<<< HEAD
-    "USE_JWT": True,
-    "JWT_AUTH_COOKIE": "paperscope-auth",
-    "JWT_AUTH_REFRESH_COOKIE": "paperscope-refresh-token",
-    "REGISTER_SERIALIZER": "apps.users.serializers.CustomRegisterSerializer",
-    "USER_DETAILS_SERIALIZER": "apps.users.serializers.UserSerializer",
-=======
     'USE_JWT': True,
     'JWT_AUTH_COOKIE': 'paperscope-auth',
     'JWT_AUTH_REFRESH_COOKIE': 'paperscope-refresh-token',
     'REGISTER_SERIALIZER': 'apps.users.serializers.CustomRegisterSerializer',
     # <--- ADDED THIS: Tells Django to send role/is_superuser back to React --->
     'USER_DETAILS_SERIALIZER': 'apps.users.serializers.UserSerializer', 
->>>>>>> Nusrat
 }
 
 SIMPLE_JWT = {
@@ -151,19 +143,11 @@ ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_AUTHENTICATION_METHOD = "email"
-<<<<<<< HEAD
-=======
 
 # <--- ADDED THESE TWO LINES: Allows Google to log into your local terminal-created Admin account --->
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
->>>>>>> Nusrat
 
-# Allows Google login to connect with local accounts using same email
-SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
-SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
-
-# Google OAuth
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
         "APP": {

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 ﻿import React, { useEffect } from "react";
+=======
+﻿﻿import React, { useEffect } from "react";
+>>>>>>> Nusrat
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import "./Dashboard.css";

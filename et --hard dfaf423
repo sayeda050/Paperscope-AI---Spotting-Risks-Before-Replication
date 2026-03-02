@@ -1,0 +1,27 @@
+[33maee8b50[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mAnindita[m[33m, [m[1;31morigin/Nusrat[m[33m, [m[1;31morigin/Anindita[m[33m, [m[1;32mNusrat[m[33m)[m HEAD@{0}: checkout: moving from Nusrat to Anindita
+[33maee8b50[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mAnindita[m[33m, [m[1;31morigin/Nusrat[m[33m, [m[1;31morigin/Anindita[m[33m, [m[1;32mNusrat[m[33m)[m HEAD@{1}: pull: Fast-forward
+[33mf8807ad[m HEAD@{2}: checkout: moving from Anindita to Nusrat
+[33maee8b50[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mAnindita[m[33m, [m[1;31morigin/Nusrat[m[33m, [m[1;31morigin/Anindita[m[33m, [m[1;32mNusrat[m[33m)[m HEAD@{3}: reset: moving to origin/Nusrat
+[33mdfaf423[m HEAD@{4}: checkout: moving from Anindita to Anindita
+[33mdfaf423[m HEAD@{5}: checkout: moving from Anindita to Anindita
+[33mdfaf423[m HEAD@{6}: reset: moving to HEAD
+[33mdfaf423[m HEAD@{7}: pull origin Anindita: Fast-forward
+[33m75c182c[m HEAD@{8}: checkout: moving from Anindita to Anindita
+[33m75c182c[m HEAD@{9}: reset: moving to HEAD
+[33m75c182c[m HEAD@{10}: commit: UI of profile settings of user dashboard
+[33ma4925fd[m HEAD@{11}: commit: UI of Analysis History for user dashboard
+[33mabe4537[m HEAD@{12}: checkout: moving from Anindita to Anindita
+[33mabe4537[m HEAD@{13}: reset: moving to HEAD
+[33mabe4537[m HEAD@{14}: commit: UI of Analysis jobs and Analysis result of user dashboard
+[33mf3c88ee[m HEAD@{15}: commit: Update google authentication and dashboard redirection
+[33mf8807ad[m HEAD@{16}: checkout: moving from Nusrat to Anindita
+[33mf8807ad[m HEAD@{17}: checkout: moving from main to Nusrat
+[33md154912[m[33m ([m[1;32mmain[m[33m)[m HEAD@{18}: reset: moving to HEAD
+[33md154912[m[33m ([m[1;32mmain[m[33m)[m HEAD@{19}: pull origin hridi: Fast-forward
+[33m6f886d5[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{20}: commit: UI for the homepage, registration, login and user dashboard
+[33m8b5dbe1[m HEAD@{21}: pull origin main --allow-unrelated-histories --no-rebase: Merge made by the 'ort' strategy.
+[33m236be83[m HEAD@{22}: commit: Initial project setup: backend, frontend database
+[33mc58b6b9[m HEAD@{23}: pull origin main --allow-unrelated-histories: updating HEAD
+[33mc58b6b9[m HEAD@{24}: pull origin main --allow-unrelated-histories: updating HEAD
+[33mc58b6b9[m HEAD@{25}: Branch: renamed refs/heads/master to refs/heads/main
+[33mc58b6b9[m HEAD@{27}: commit (initial): Initial project setup: backend frontend database

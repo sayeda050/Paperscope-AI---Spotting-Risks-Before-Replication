@@ -23,13 +23,25 @@ export async function getMe() {
   return res.data;
 }
 
+<<<<<<< HEAD
 // GOOGLE LOGIN
+=======
+// ==========================================
+// GOOGLE LOGIN
+// ==========================================
+>>>>>>> Nusrat
 export async function googleLoginUser(payload) {
   const res = await http.post("/api/users/google/", payload);
   return res.data;
 }
 
+<<<<<<< HEAD
 // FORGOT / RESET PASSWORD
+=======
+// ==========================================
+// FORGOT / RESET PASSWORD
+// ==========================================
+>>>>>>> Nusrat
 export async function forgotPassword(payload) {
   // expected: { email }
   const res = await http.post("/api/users/forgot-password/", payload);

@@ -2,11 +2,13 @@
 
 // dj-rest-auth endpoints
 export async function registerUser(payload) {
+  // expected: registration payload handled by backend serializer
   const res = await http.post("/api/auth/registration/", payload);
   return res.data;
 }
 
 export async function loginUser(payload) {
+  // expected: login payload handled by backend auth setup
   const res = await http.post("/api/auth/login/", payload);
   return res.data;
 }
@@ -27,7 +29,7 @@ export async function googleLoginUser(payload) {
   return res.data;
 }
 
-// FORGOT / RESET PASSWORD (CUSTOM ENDPOINTS)
+// FORGOT / RESET PASSWORD
 export async function forgotPassword(payload) {
   // expected: { email }
   const res = await http.post("/api/users/forgot-password/", payload);

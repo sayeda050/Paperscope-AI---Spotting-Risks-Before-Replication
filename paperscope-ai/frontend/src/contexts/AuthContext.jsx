@@ -1,14 +1,11 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { registerUser, loginUser, getMe, logoutUser, googleLoginUser } from "../api/auth.api";
 
-
 const AuthContext = createContext(null);
-
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [initializing, setInitializing] = useState(true);
-
 
   // Checks if the user is logged in by asking the backend "Who am I?"
   const checkAuth = async () => {
@@ -22,11 +19,9 @@ export function AuthProvider({ children }) {
     }
   };
 
-
   useEffect(() => {
     checkAuth();
   }, []);
-
 
   const register = async (payload) => {
     try {
@@ -38,22 +33,21 @@ export function AuthProvider({ children }) {
     }
   };
 
-
   // Inside AuthContext.jsx
-const login = async (payload) => {
-  try {
-    const data = await loginUser(payload); // API call
-    
-    // 🚨 CRITICAL: You MUST set the state here before returning!
-    // If you skip this, PrivateRoute will kick the user out.
-    setUser(data.user); // Or however your backend returns user data
-    setIsAuthed(true);  
-    
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err.response?.data };
-  }
-};
+  const login = async (payload) => {
+    try {
+      const data = await loginUser(payload); // API call
+      
+      // 🚨 CRITICAL: You MUST set the state here before returning!
+      // If you skip this, PrivateRoute will kick the user out.
+      setUser(data.user); // Or however your backend returns user data
+      // FIXED: Removed setIsAuthed(true) because it does not exist and caused the crash!
+      
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.response?.data };
+    }
+  };
 
   const googleLogin = async (accessToken) => {
     try {
@@ -63,7 +57,7 @@ const login = async (payload) => {
       
       // 2. 🚨 CRITICAL: Set state before returning so the router doesn't bounce you
       setUser(data.user); 
-      setIsAuthed(true);
+      // FIXED: Removed setIsAuthed(true) because it does not exist and caused the crash!
       
       return { success: true };
     } catch (err) {
@@ -71,7 +65,6 @@ const login = async (payload) => {
       return { success: false, error: "Google login failed on the server." };
     }
   };
-
 
   const logout = async () => {
     try {
@@ -82,7 +75,6 @@ const login = async (payload) => {
       setUser(null);
     }
   };
-
 
   const value = useMemo(
     () => ({
@@ -98,14 +90,12 @@ const login = async (payload) => {
     [user, initializing]
   );
 
-
   return (
     <AuthContext.Provider value={value}>
       {!initializing && children}
     </AuthContext.Provider>
   );
 }
-
 
 export function useAuth() {
   const ctx = useContext(AuthContext);

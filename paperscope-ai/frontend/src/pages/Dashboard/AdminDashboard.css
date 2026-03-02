@@ -1,0 +1,114 @@
+/* src/pages/Dashboard/AdminDashboard.css */
+
+.ps-role-admin {
+  background: rgba(139, 92, 246, 0.12) !important;
+  color: #6d28d9 !important;
+}
+
+.ps-icon-error {
+  background: rgba(239, 68, 68, 0.10) !important;
+}
+
+/* Charts Grid Layout */
+.ps-charts-grid {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+@media (min-width: 1024px) {
+  .ps-charts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.ps-chart-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.ps-chart-header {
+  padding: 16px 16px 12px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  border-bottom: 1px solid #e6eaf0;
+}
+
+.ps-chart-body {
+  padding: 16px;
+}
+
+/* Status Summary Grid */
+.ps-status-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 16px;
+}
+
+@media (min-width: 640px) {
+  .ps-status-summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.ps-status-box {
+  background: #f8fafc;
+  border: 1px solid #e6eaf0;
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+}
+
+.ps-status-icon {
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+.ps-status-val {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.ps-status-name {
+  font-size: 12px;
+  color: #64748b;
+  margin: 4px 0 0 0;
+}
+
+/* Specific Status Colors */
+.ps-text-done { color: hsl(142, 76%, 36%); }
+.ps-text-processing { color: hsl(212, 100%, 48%); }
+.ps-text-queued { color: hsl(38, 92%, 50%); }
+.ps-text-failed { color: hsl(0, 72%, 51%); }
+
+/* Shine Effect */
+.card-shine {
+  position: relative;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-shine::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: skewX(-20deg);
+  transition: all 0.5s ease;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.card-shine:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.card-shine:hover::before {
+  left: 200%;
+}

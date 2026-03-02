@@ -122,6 +122,7 @@ REST_AUTH = {
     "JWT_AUTH_COOKIE": "paperscope-auth",
     "JWT_AUTH_REFRESH_COOKIE": "paperscope-refresh-token",
     "REGISTER_SERIALIZER": "apps.users.serializers.CustomRegisterSerializer",
+    "USER_DETAILS_SERIALIZER": "apps.users.serializers.UserSerializer",
 }
 
 SIMPLE_JWT = {
@@ -130,12 +131,21 @@ SIMPLE_JWT = {
 }
 
 # ---------------------------------------------------------
-# allauth (use ONE style consistently)
+# allauth
 # ---------------------------------------------------------
-# New-style settings (keep these)
+# New-style settings
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "none"
+
+# Compatibility / behavior settings kept from existing working setup
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = False
+ACCOUNT_AUTHENTICATION_METHOD = "email"
+
+# Allows Google login to connect with local accounts using same email
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
 
 # Google OAuth
 SOCIALACCOUNT_PROVIDERS = {

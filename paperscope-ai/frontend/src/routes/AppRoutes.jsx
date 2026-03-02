@@ -11,15 +11,17 @@ import ResetPassword from "../pages/Auth/ResetPassword.jsx";
 
 // Main pages
 import Dashboard from "../pages/Dashboard/Dashboard.jsx";
-import SubmitPaper from "../pages/Dashboard/SubmitPaper.jsx";
+import AdminDashboard from "../pages/Dashboard/AdminDashboard.jsx";
+import AdminResults from "../pages/Dashboard/AdminResults.jsx";
+import AdminResultDetail from "../pages/Dashboard/AdminResultDetail.jsx";
+import ErrorLogs from "../pages/Dashboard/ErrorLogs.jsx";
+import ModelVersions from "../pages/Dashboard/ModelVersions.jsx";
+import SubmitPaper from "../pages/Papers/SubmitPaper.jsx";
 import Profile from "../pages/Dashboard/Profile.jsx";
 import AnalysisJobs from "../pages/Analysis/AnalysisJobs.jsx";
 import AnalysisResult from "../pages/Analysis/AnalysisResult.jsx";
 import History from "../pages/Analysis/History.jsx";
 
-/**
- * PrivateRoute: Only allows logged-in users.
- */
 function PrivateRoute({ children }) {
   const { isAuthed, initializing } = useAuth();
 
@@ -30,9 +32,6 @@ function PrivateRoute({ children }) {
   return isAuthed ? children : <Navigate to="/login" replace />;
 }
 
-/**
- * PublicRoute: Prevents logged-in users from seeing auth pages.
- */
 function PublicRoute({ children }) {
   const { isAuthed, initializing } = useAuth();
 
@@ -44,10 +43,8 @@ function PublicRoute({ children }) {
 export default function AppRoutes() {
   return (
     <Routes>
-      {/* Landing Page */}
       <Route path="/" element={<Index />} />
 
-      {/* Public Auth Routes */}
       <Route
         path="/login"
         element={
@@ -81,7 +78,7 @@ export default function AppRoutes() {
         }
       />
 
-      {/* Protected Routes */}
+      {/* User routes */}
       <Route
         path="/dashboard"
         element={
@@ -91,7 +88,7 @@ export default function AppRoutes() {
         }
       />
       <Route
-        path="/submit-paper"
+        path="/dashboard/submit"
         element={
           <PrivateRoute>
             <SubmitPaper />
@@ -99,7 +96,7 @@ export default function AppRoutes() {
         }
       />
       <Route
-        path="/profile"
+        path="/dashboard/profile"
         element={
           <PrivateRoute>
             <Profile />
@@ -107,7 +104,7 @@ export default function AppRoutes() {
         }
       />
       <Route
-        path="/analysis/jobs"
+        path="/dashboard/jobs"
         element={
           <PrivateRoute>
             <AnalysisJobs />
@@ -115,7 +112,7 @@ export default function AppRoutes() {
         }
       />
       <Route
-        path="/analysis/result"
+        path="/dashboard/result/:jobId"
         element={
           <PrivateRoute>
             <AnalysisResult />
@@ -123,7 +120,7 @@ export default function AppRoutes() {
         }
       />
       <Route
-        path="/history"
+        path="/dashboard/history"
         element={
           <PrivateRoute>
             <History />
@@ -131,7 +128,48 @@ export default function AppRoutes() {
         }
       />
 
-      {/* Fallback */}
+      {/* Admin routes */}
+      <Route
+        path="/dashboard/admin"
+        element={
+          <PrivateRoute>
+            <AdminDashboard />
+          </PrivateRoute>
+        }
+      />
+      <Route
+  path="/dashboard/admin/results"
+  element={
+    <PrivateRoute>
+      <AdminResults />
+        </PrivateRoute>
+        }
+      />
+      <Route
+  path="/dashboard/admin/results/:resultId"
+  element={
+    <PrivateRoute>
+      <AdminResultDetail />
+    </PrivateRoute>
+  }
+/>
+      <Route
+        path="/dashboard/admin/models"
+        element={
+          <PrivateRoute>
+            <ModelVersions />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/dashboard/admin/errors"
+        element={
+          <PrivateRoute>
+            <ErrorLogs />
+          </PrivateRoute>
+        }
+      />
+
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

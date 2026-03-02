@@ -1,31 +1,5 @@
-.error-logs-page {
-  min-height: 100vh;
-  background: #f5f7fb;
-}
-
-.error-logs-topbar {
-  height: 72px;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 28px;
-}
-
-.error-logs-role {
-  background: #e7f7f3;
-  color: #188977;
-  padding: 8px 14px;
-  border-radius: 999px;
-  font-size: 14px;
-  font-weight: 500;
-}
-
 .error-logs-content {
   max-width: 860px;
-  margin: 0 auto;
-  padding: 36px 28px 48px;
 }
 
 .error-logs-header {
@@ -91,7 +65,7 @@
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 16px;
-  padding: 18px 18px;
+  padding: 18px;
   box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
 }
 
@@ -175,7 +149,7 @@
 
 @media (max-width: 768px) {
   .error-logs-content {
-    padding: 24px 16px 36px;
+    max-width: 100%;
   }
 
   .error-logs-header h1 {

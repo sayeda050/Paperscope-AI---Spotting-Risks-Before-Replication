@@ -1,4 +1,4 @@
-﻿﻿import React, { useEffect } from "react";
+﻿import React, { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import "./Dashboard.css";
@@ -7,11 +7,18 @@ export default function Dashboard() {
   const { user, logout, initializing } = useAuth();
   const navigate = useNavigate();
 
+  // If logged-in user is actually an admin, send them to admin dashboard
+  const isAdmin = user?.is_superuser || user?.role === "ADMIN";
+
   useEffect(() => {
-    if (!initializing && !user) {
-      navigate("/login");
+    if (!initializing) {
+      if (!user) {
+        navigate("/login");
+      } else if (isAdmin) {
+        navigate("/dashboard/admin");
+      }
     }
-  }, [user, initializing, navigate]);
+  }, [user, initializing, isAdmin, navigate]);
 
   if (initializing) {
     return (
@@ -49,9 +56,9 @@ export default function Dashboard() {
   const failed = mockJobs.filter((j) => j.status === "FAILED").length;
 
   const quickActions = [
-    { label: "Upload PDF", desc: "Submit a paper for analysis", to: "/submit-paper", icon: "⬆️" },
-    { label: "Analyze arXiv", desc: "Analyze by arXiv link or ID", to: "/submit-paper", icon: "🔎" },
-    { label: "View History", desc: "Browse past analyses", to: "/history", icon: "🕘" },
+    { label: "Upload PDF", desc: "Submit a paper for analysis", to: "/dashboard/submit", icon: "⬆️" },
+    { label: "Analyze arXiv", desc: "Analyze by arXiv link or ID", to: "/dashboard/submit", icon: "🔎" },
+    { label: "View History", desc: "Browse past analyses", to: "/dashboard/history", icon: "🕘" },
   ];
 
   function StatusBadge({ status }) {
@@ -61,7 +68,7 @@ export default function Dashboard() {
 
   function RiskBadge({ label, score }) {
     if (!label) return null;
-    const l = String(label).toLowerCase();
+    const l = String(label || "").toLowerCase();
     const pct = Math.round((score || 0) * 100);
     const text = `${label} Risk (${pct})`;
     return <span className={`ps-pill ps-risk ps-risk-${l}`}>{text}</span>;
@@ -77,31 +84,36 @@ export default function Dashboard() {
 
         <div className="ps-nav-section">
           <p className="ps-nav-label">NAVIGATION</p>
-          <Link to="/dashboard" className="ps-nav-link active">▦ Dashboard <span className="ps-chevron">›</span></Link>
-          <Link to="/submit-paper" className="ps-nav-link">⬆ Submit Paper</Link>
-          <Link to="/analysis/jobs" className="ps-nav-link">⏱ Analysis Jobs</Link>
-          <Link to="/history" className="ps-nav-link">🕘 History</Link>
-          <Link to="/profile" className="ps-nav-link">👤 Profile</Link>
+          <Link to="/dashboard" className="ps-nav-link active">
+            ▦ Dashboard <span className="ps-chevron">›</span>
+          </Link>
+          <Link to="/dashboard/submit" className="ps-nav-link">⬆ Submit Paper</Link>
+          <Link to="/dashboard/jobs" className="ps-nav-link">⏱ Analysis Jobs</Link>
+          <Link to="/dashboard/history" className="ps-nav-link">🕘 History</Link>
+          <Link to="/dashboard/profile" className="ps-nav-link">👤 Profile</Link>
         </div>
 
         <div className="ps-sidebar-footer">
           <div className="ps-user-card">
             <div className="ps-user-avatar">
-              {user.first_name?.[0] || ""}{user.last_name?.[0] || ""}
+              {user.first_name?.[0] || ""}
+              {user.last_name?.[0] || ""}
             </div>
             <div className="ps-user-meta">
               <p className="ps-user-name">{user.first_name} {user.last_name}</p>
               <p className="ps-user-email">{user.email}</p>
             </div>
           </div>
-          <button className="ps-btn-logout" onClick={handleLogout}>⎋ Sign Out</button>
+          <button className="ps-btn-logout" onClick={handleLogout}>
+            ⎋ Sign Out
+          </button>
         </div>
       </aside>
 
       <main className="ps-main">
         <div className="ps-topbar">
           <div />
-          <div className="ps-role-pill">Researcher</div>
+          <div className="ps-role-pill">{isAdmin ? "Admin" : "Researcher"}</div>
         </div>
 
         <div className="ps-content">
@@ -162,7 +174,7 @@ export default function Dashboard() {
           <div className="ps-card ps-jobs-card">
             <div className="ps-jobs-header">
               <h2 className="ps-jobs-title">Recent Analysis Jobs</h2>
-              <Link className="ps-view-all" to="/analysis/jobs">
+              <Link className="ps-view-all" to="/dashboard/jobs">
                 View All
               </Link>
             </div>
@@ -183,6 +195,7 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
+
           <div style={{ height: 18 }} />
         </div>
       </main>

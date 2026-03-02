@@ -1,45 +1,47 @@
-import React, { useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext.jsx';
-import { Upload, Link as LinkIcon, FileText, X } from 'lucide-react';
-import './SubmitPaper.css';
+import React, { useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext.jsx";
+import { Upload, Link as LinkIcon, FileText, X } from "lucide-react";
+import "./SubmitPaper.css";
 
 export default function SubmitPaper() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState('pdf');
-  const [paperTitle, setPaperTitle] = useState('');
-  const [arxivLink, setArxivLink] = useState('');
+  const [activeTab, setActiveTab] = useState("pdf");
+  const [paperTitle, setPaperTitle] = useState("");
+  const [arxivLink, setArxivLink] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const fileInputRef = useRef(null);
 
+  if (!user) return null;
+
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate("/login");
   };
 
   const handleFileChange = (file) => {
     if (!file) return;
 
-    if (file.type !== 'application/pdf') {
-      alert('Only PDF files are allowed.');
+    if (file.type !== "application/pdf") {
+      alert("Only PDF files are allowed.");
       return;
     }
 
     const maxSize = 50 * 1024 * 1024;
     if (file.size > maxSize) {
-      alert('File size must be 50MB or less.');
+      alert("File size must be 50MB or less.");
       return;
     }
 
     setSelectedFile(file);
 
     if (!paperTitle.trim()) {
-      const nameWithoutExtension = file.name.replace(/\.pdf$/i, '');
+      const nameWithoutExtension = file.name.replace(/\.pdf$/i, "");
       setPaperTitle(nameWithoutExtension);
     }
   };
@@ -60,7 +62,7 @@ export default function SubmitPaper() {
   const removeFile = () => {
     setSelectedFile(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
     }
   };
 
@@ -68,7 +70,7 @@ export default function SubmitPaper() {
     e.preventDefault();
 
     if (!selectedFile) {
-      alert('Please select a PDF file first.');
+      alert("Please select a PDF file first.");
       return;
     }
 
@@ -76,9 +78,9 @@ export default function SubmitPaper() {
 
     try {
       await new Promise((resolve) => setTimeout(resolve, 1200));
-      alert('Paper submitted for analysis successfully.');
+      alert("Paper submitted for analysis successfully.");
     } catch (error) {
-      alert('Failed to submit paper.');
+      alert("Failed to submit paper.");
     } finally {
       setLoading(false);
     }
@@ -88,7 +90,7 @@ export default function SubmitPaper() {
     e.preventDefault();
 
     if (!arxivLink.trim()) {
-      alert('Please enter an arXiv link.');
+      alert("Please enter an arXiv link.");
       return;
     }
 
@@ -96,81 +98,73 @@ export default function SubmitPaper() {
 
     try {
       await new Promise((resolve) => setTimeout(resolve, 1200));
-      alert('arXiv paper submitted for analysis successfully.');
+      alert("arXiv paper submitted for analysis successfully.");
     } catch (error) {
-      alert('Failed to submit arXiv link.');
+      alert("Failed to submit arXiv link.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="submit-layout">
-      <aside className="submit-sidebar">
-        <div>
-          <div className="submit-brand">
-            <div className="submit-brand-icon">🛡️</div>
-            <span className="submit-brand-name">PaperScope AI</span>
-          </div>
-
-          <div className="submit-nav-section">
-            <p className="submit-nav-title">NAVIGATION</p>
-
-            <Link to="/dashboard" className="submit-nav-link">
-              <span className="submit-nav-icon">▦</span>
-              <span>Dashboard</span>
-            </Link>
-
-            <Link to="/submit-paper" className="submit-nav-link active">
-              <span className="submit-nav-icon">⤴</span>
-              <span>Submit Paper</span>
-              <span className="submit-nav-arrow">›</span>
-            </Link>
-
-            <Link to="/analysis/jobs" className="submit-nav-link">
-              <span className="submit-nav-icon">◔</span>
-              <span>Analysis Jobs</span>
-            </Link>
-
-            <Link to="/history" className="submit-nav-link">
-              <span className="submit-nav-icon">◔</span>
-              <span>History</span>
-            </Link>
-
-            <Link to="/profile" className="submit-nav-link">
-              <span className="submit-nav-icon">◔</span>
-              <span>Profile</span>
-            </Link>
-          </div>
+    <div className="ps-dashboard-layout">
+      <aside className="ps-sidebar">
+        <div className="ps-brand">
+          <div className="ps-logo-shield">🛡️</div>
+          <span className="ps-brand-name">PaperScope AI</span>
         </div>
 
-        <div className="submit-sidebar-footer">
-          <div className="submit-user-box">
-            <div className="submit-user-avatar">
-              {user?.first_name?.[0] || ''}
-              {user?.last_name?.[0] || ''}
+        <div className="ps-nav-section">
+          <p className="ps-nav-label">NAVIGATION</p>
+
+          <Link to="/dashboard" className="ps-nav-link">
+            ▦ Dashboard
+          </Link>
+
+          <Link to="/dashboard/submit" className="ps-nav-link active">
+            ⬆ Submit Paper <span className="ps-chevron">›</span>
+          </Link>
+
+          <Link to="/dashboard/jobs" className="ps-nav-link">
+            ⏱ Analysis Jobs
+          </Link>
+
+          <Link to="/dashboard/history" className="ps-nav-link">
+            🕘 History
+          </Link>
+
+          <Link to="/dashboard/profile" className="ps-nav-link">
+            👤 Profile
+          </Link>
+        </div>
+
+        <div className="ps-sidebar-footer">
+          <div className="ps-user-card">
+            <div className="ps-user-avatar">
+              {user?.first_name?.[0] || ""}
+              {user?.last_name?.[0] || ""}
             </div>
-            <div className="submit-user-meta">
-              <p className="submit-user-name">
+            <div className="ps-user-meta">
+              <p className="ps-user-name">
                 {user?.first_name} {user?.last_name}
               </p>
-              <p className="submit-user-email">{user?.email}</p>
+              <p className="ps-user-email">{user?.email}</p>
             </div>
           </div>
 
-          <button className="submit-signout-btn" onClick={handleLogout}>
+          <button className="ps-btn-logout" onClick={handleLogout}>
             ⎋ Sign Out
           </button>
         </div>
       </aside>
 
-      <main className="submit-main">
-        <div className="submit-topbar">
+      <main className="ps-main-content">
+        <header className="ps-top-bar">
           <div />
-          <div className="submit-role-pill">Researcher</div>
-        </div>
+          <span className="ps-role-badge">Researcher</span>
+        </header>
 
-        <div className="submit-page-content">
+        <div className="ps-page-container submit-paper-scope">
           <div className="submit-paper-header">
             <h1>Submit Paper</h1>
             <p>Upload a PDF or provide an arXiv link to start analysis.</p>
@@ -178,8 +172,8 @@ export default function SubmitPaper() {
 
           <div className="submit-paper-tabs">
             <button
-              className={`submit-tab ${activeTab === 'pdf' ? 'active' : ''}`}
-              onClick={() => setActiveTab('pdf')}
+              className={`submit-tab ${activeTab === "pdf" ? "active" : ""}`}
+              onClick={() => setActiveTab("pdf")}
               type="button"
             >
               <Upload size={16} />
@@ -187,8 +181,8 @@ export default function SubmitPaper() {
             </button>
 
             <button
-              className={`submit-tab ${activeTab === 'arxiv' ? 'active' : ''}`}
-              onClick={() => setActiveTab('arxiv')}
+              className={`submit-tab ${activeTab === "arxiv" ? "active" : ""}`}
+              onClick={() => setActiveTab("arxiv")}
               type="button"
             >
               <LinkIcon size={16} />
@@ -196,7 +190,7 @@ export default function SubmitPaper() {
             </button>
           </div>
 
-          {activeTab === 'pdf' ? (
+          {activeTab === "pdf" ? (
             <div className="submit-card">
               <h2>Upload Research Paper</h2>
               <p className="submit-card-subtitle">Supported format: PDF (max 50MB)</p>
@@ -214,7 +208,7 @@ export default function SubmitPaper() {
                 <label>PDF File</label>
 
                 <div
-                  className={`upload-dropzone ${dragActive ? 'drag-active' : ''}`}
+                  className={`upload-dropzone ${dragActive ? "drag-active" : ""}`}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -265,7 +259,7 @@ export default function SubmitPaper() {
 
                 <button className="submit-analysis-btn" type="submit" disabled={loading}>
                   <Upload size={16} />
-                  <span>{loading ? 'Submitting...' : 'Submit for Analysis'}</span>
+                  <span>{loading ? "Submitting..." : "Submit for Analysis"}</span>
                 </button>
               </form>
             </div>
@@ -288,7 +282,7 @@ export default function SubmitPaper() {
 
                 <button className="submit-analysis-btn" type="submit" disabled={loading}>
                   <LinkIcon size={16} />
-                  <span>{loading ? 'Submitting...' : 'Analyze arXiv Paper'}</span>
+                  <span>{loading ? "Submitting..." : "Analyze arXiv Paper"}</span>
                 </button>
               </form>
             </div>

@@ -8,6 +8,7 @@ import Login from "../pages/Auth/Login.jsx";
 import Register from "../pages/Auth/Register.jsx";
 import Dashboard from "../pages/Dashboard/Dashboard.jsx";
 import AdminDashboard from "../pages/Dashboard/AdminDashboard.jsx"; // <-- Added Admin Import
+import AdminPapers from "../pages/Papers/AdminPapers.jsx"; // <-- NEW: Added AdminPapers Import
 import AnalysisJobs from "../pages/Analysis/AnalysisJobs.jsx";
 import AnalysisResult from "../pages/Analysis/AnalysisResult.jsx";
 import History from "../pages/Analysis/History.jsx"; 
@@ -36,6 +37,9 @@ export default function AppRoutes() {
       
       {/* <-- Added Admin Route Here --> */}
       <Route path="/dashboard/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
+      
+      {/* <-- NEW: Added Admin Papers Route Here --> */}
+      <Route path="/dashboard/admin/papers" element={<PrivateRoute><AdminPapers /></PrivateRoute>} />
       
       <Route path="/dashboard/jobs" element={<PrivateRoute><AnalysisJobs /></PrivateRoute>} />
       <Route path="/dashboard/history" element={<PrivateRoute><History /></PrivateRoute>} /> 

@@ -25,9 +25,24 @@ export async function getMe() {
 }
 
 // ==========================================
-// NEW ADDITION FOR GOOGLE LOGIN
+// GOOGLE LOGIN
 // ==========================================
 export async function googleLoginUser(payload) {
   const res = await http.post("/api/users/google/", payload);
+  return res.data;
+}
+
+// ==========================================
+// FORGOT / RESET PASSWORD
+// ==========================================
+export async function forgotPassword(payload) {
+  // expected: { email }
+  const res = await http.post("/api/users/forgot-password/", payload);
+  return res.data;
+}
+
+export async function resetPassword(payload) {
+  // expected: { uid, token, new_password }
+  const res = await http.post("/api/users/reset-password/", payload);
   return res.data;
 }

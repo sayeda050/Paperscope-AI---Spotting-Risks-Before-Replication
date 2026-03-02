@@ -1,50 +1,21 @@
 import React, { useState } from 'react';
-import { 
-  Shield, 
-  LayoutDashboard, 
-  Users, 
-  FileText, 
-  Clock, 
-  CheckSquare, 
-  Box, 
-  AlertTriangle, 
-  User, 
-  LogOut,
-  RefreshCcw,
-  ChevronDown
-} from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { RefreshCcw, ChevronDown } from 'lucide-react';
+
+import "../Dashboard/Dashboard.css"; // Ensure this path points to your main dashboard CSS
 import './AdminJobs.css';
 
 export default function AdminJobs() {
-  const { user, logout } = useAuth(); // Fetches real-time user data [cite: 191, 192, 194]
+  const { user, logout, initializing } = useAuth();
   const navigate = useNavigate();
-  
-  // Real-time derived user display data
-  const displayName = user?.full_name || 
-                      (user?.first_name && user?.last_name ? `${user.first_name} ${user.last_name}` : null) || 
-                      user?.email?.split('@')[0] || 
-                      'User';
 
-  const displayEmail = user?.email || 'admin@paperscope.ai';
-
-  // Derived initials for the avatar (e.g., "Sarah Chen" -> "SC", "anindita.lubaba" -> "AL")
-  const getInitials = (name, email) => {
-    if (name && name !== 'User') {
-      const parts = name.split(/[\s._]/);
-      return parts.map(n => n[0]).join('').toUpperCase().substring(0, 2);
-    }
-    if (email) return email[0].toUpperCase();
-    return "U";
-  };
-
-  const handleSignOut = async () => {
+  const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
-  // Mock data for analysis jobs matching project lifecycle [cite: 242]
+  // Mock data for analysis jobs
   const [jobs] = useState([
     { id: 1, paper: "Deep Learning for Protein Folding: A Reproducibility Study", user: "Alex Rivera", status: "Completed", created: "1/10/2025" },
     { id: 2, paper: "Attention Mechanisms in Low-Resource NLP", user: "Alex Rivera", status: "Completed", created: "1/15/2025" },
@@ -64,82 +35,53 @@ export default function AdminJobs() {
     }
   };
 
+  if (initializing) return null;
+  if (!user) return null;
+
   return (
-    <div className="admin-page-layout">
-      {/* --- SIDEBAR PANEL --- */}
-      <aside className="admin-sidebar">
-        <div className="sidebar-brand">
-          <Shield className="brand-icon" />
-          <span>PaperScope AI</span>
+    <div className="ps-app">
+      {/* SIDEBAR - EXACT MATCH TO ADMIN DASHBOARD */}
+      <aside className="ps-sidebar">
+        <div className="ps-brand">
+          <div className="ps-logo-shield">🛡️</div>
+          <span className="ps-brand-name">PaperScope AI</span>
         </div>
-
-        <div className="sidebar-section">
-          <p className="section-label">ADMINISTRATION</p>
-          <nav className="sidebar-nav">
-            <Link to="/dashboard/admin" className="nav-item">
-              <LayoutDashboard size={18} /> DASHBOARD
-            </Link>
-            <Link to="/dashboard/admin/users" className="nav-item">
-              <Users size={18} /> USERS
-            </Link>
-            <Link to="/dashboard/admin/papers" className="nav-item">
-              <FileText size={18} /> PAPERS
-            </Link>
-            <Link to="/dashboard/admin/jobs" className="nav-item active">
-              <Clock size={18} /> JOBS
-              <div className="active-indicator" />
-            </Link>
-            <Link to="#" className="nav-item">
-              <CheckSquare size={18} /> RESULTS
-            </Link>
-            <Link to="#" className="nav-item">
-              <Box size={18} /> MODELS
-            </Link>
-            <Link to="#" className="nav-item">
-              <AlertTriangle size={18} /> ERROR LOGS
-            </Link>
-            <Link to="/dashboard/profile" className="nav-item">
-              <User size={18} /> PROFILE
-            </Link>
-          </nav>
+        <div className="ps-nav-section">
+          <p className="ps-nav-label">ADMINISTRATION</p>
+          <Link to="/dashboard/admin" className="ps-nav-link">▦ Dashboard</Link>
+          <Link to="/dashboard/admin/users" className="ps-nav-link">👥 Users</Link>
+          <Link to="/dashboard/admin/papers" className="ps-nav-link">📄 Papers</Link>
+          <Link to="/dashboard/admin/jobs" className="ps-nav-link active">⏱ Jobs <span className="ps-chevron">›</span></Link>
+          <Link to="/dashboard/admin/results" className="ps-nav-link">🗄️ Results</Link>
+          <Link to="/dashboard/admin/models" className="ps-nav-link">💠 Models</Link>
+          <Link to="/dashboard/admin/errors" className="ps-nav-link">⚠️ Error Logs</Link>
+          <Link to="/dashboard/profile" className="ps-nav-link">👤 Profile</Link>
         </div>
-
-        <div className="sidebar-footer">
-          <div className="user-profile-card">
-            <div className="user-avatar">
-              {getInitials(displayName, displayEmail)}
+        <div className="ps-sidebar-footer">
+          <div className="ps-user-card">
+            <div className="ps-user-avatar">
+              {user.first_name?.[0] || ""}{user.last_name?.[0] || ""}
             </div>
-            <div className="user-info">
-              <p className="user-name">{displayName}</p>
-              <p className="user-email">{displayEmail}</p>
+            <div className="ps-user-meta">
+              <p className="ps-user-name">{user.first_name} {user.last_name}</p>
+              <p className="ps-user-email">{user.email}</p>
             </div>
           </div>
-          <button className="sign-out-btn" onClick={handleSignOut}>
-            <LogOut size={18} /> Sign Out
-          </button>
+          <button className="ps-btn-logout" onClick={handleLogout}>⎋ Sign Out</button>
         </div>
       </aside>
 
-      {/* --- MAIN CONTENT AREA --- */}
-      <main className="admin-main-content">
-        <header className="main-header">
-          <div className="header-badge">Admin</div>
-        </header>
+      {/* MAIN CONTENT AREA */}
+      <main className="ps-main">
+        <div className="ps-topbar">
+          <div />
+          <div className="ps-role-pill ps-role-admin">Administrator</div>
+        </div>
 
-        <div className="content-container">
-          <div className="content-title-row">
-            <div>
-              <h1 className="content-title">Manage Jobs</h1>
-              <p className="content-subtitle">Monitor and manage all analysis jobs.</p>
-            </div>
-            
-            <div className="filter-dropdown">
-              <select className="filter-select">
-                <option value="all">All</option>
-                <option value="completed">Completed</option>
-              </select>
-              <ChevronDown className="filter-chevron" size={16} />
-            </div>
+        <div className="ps-content">
+          <div className="ps-header">
+            <h1 className="ps-title">Manage Jobs</h1>
+            <p className="ps-subtitle">Monitor and manage all system analysis jobs.</p>
           </div>
 
           <div className="table-card">
@@ -157,14 +99,14 @@ export default function AdminJobs() {
                 {jobs.map((job) => (
                   <tr key={job.id} className="job-row">
                     <td className="paper-name">{job.paper}</td>
-                    <td className="user-name-cell">{job.user}</td>
+                    <td>{job.user}</td>
                     <td>
                       <span className={`status-badge ${getStatusClass(job.status)}`}>
                         {job.status}
                       </span>
                     </td>
-                    <td className="date-cell">{job.created}</td>
-                    <td className="actions-cell">
+                    <td>{job.created}</td>
+                    <td className="text-right">
                       {job.status === 'Failed' && (
                         <button className="retry-btn">
                           <RefreshCcw size={14} /> Retry

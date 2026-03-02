@@ -1,0 +1,145 @@
+.admin-results-wrap {
+  max-width: 980px;
+}
+
+.admin-results-header {
+  margin-bottom: 26px;
+}
+
+.admin-results-header h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.admin-results-header p {
+  margin: 0;
+  font-size: 16px;
+  color: #64748b;
+}
+
+.admin-results-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+}
+
+.admin-results-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.admin-results-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+}
+
+.admin-results-table thead th {
+  text-align: left;
+  padding: 16px 24px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #667085;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.admin-results-table tbody td {
+  padding: 18px 24px;
+  border-bottom: 1px solid #eceff3;
+  font-size: 15px;
+  color: #1f2937;
+  vertical-align: middle;
+}
+
+.admin-results-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.paper-cell {
+  max-width: 360px;
+}
+
+.paper-title-text {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #1e293b;
+}
+
+.score-cell {
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.date-cell {
+  color: #667085;
+}
+
+.detail-cell {
+  width: 70px;
+}
+
+.detail-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #1f2937;
+  text-decoration: none;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.detail-icon-btn:hover {
+  color: #111827;
+  transform: scale(1.05);
+}
+
+.admin-result-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.admin-result-pill.high {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.admin-result-pill.medium {
+  background: rgba(245, 158, 11, 0.14);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.admin-result-pill.low {
+  background: rgba(34, 197, 94, 0.14);
+  color: #16a34a;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+@media (max-width: 768px) {
+  .admin-results-wrap {
+    max-width: 100%;
+  }
+
+  .admin-results-header h1 {
+    font-size: 24px;
+  }
+
+  .admin-results-table thead th,
+  .admin-results-table tbody td {
+    padding: 14px 16px;
+  }
+}

@@ -1,28 +1,25 @@
 ﻿﻿import React, { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../../contexts/AuthContext.jsx"; 
+import { useAuth } from "../../contexts/AuthContext.jsx";
 import "./Dashboard.css";
 
 export default function Dashboard() {
-  const { user, logout, initializing } = useAuth(); // Gets the logged-in person
+  const { user, logout, initializing } = useAuth();
   const navigate = useNavigate();
 
-  // Identify if the user is an admin
-  const isAdmin = user?.is_superuser || user?.role === 'ADMIN';
+  // If logged-in user is actually an admin, send them to admin dashboard
+  const isAdmin = user?.is_superuser || user?.role === "ADMIN";
 
-  // 1. FIX THE LOOP: Wait for the auth check to finish before redirecting
-  // 2. ADMIN CHECK: Redirect admins to their specific dashboard
   useEffect(() => {
     if (!initializing) {
       if (!user) {
-        navigate('/login');
+        navigate("/login");
       } else if (isAdmin) {
-        navigate('/dashboard/admin');
+        navigate("/dashboard/admin");
       }
     }
   }, [user, initializing, isAdmin, navigate]);
 
-  // 3. SHOW LOADING: Prevents the "Flash" of the login page
   if (initializing) {
     return (
       <div className="ps-loading-screen">
@@ -32,15 +29,13 @@ export default function Dashboard() {
     );
   }
 
-  // Safety check
   if (!user) return null;
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate("/login");
   };
 
-  // Mock data preserved - replace these with API calls later
   const mockPapers = [
     { id: "p1", userId: user.user_id, title: "Deep Learning for Protein Folding: A Reproducibility Study" },
     { id: "p2", userId: user.user_id, title: "Attention Mechanisms in Low-Resource NLP" },
@@ -73,7 +68,7 @@ export default function Dashboard() {
 
   function RiskBadge({ label, score }) {
     if (!label) return null;
-    const l = String(label).toLowerCase();
+    const l = String(label || "").toLowerCase();
     const pct = Math.round((score || 0) * 100);
     const text = `${label} Risk (${pct})`;
     return <span className={`ps-pill ps-risk ps-risk-${l}`}>{text}</span>;
@@ -81,39 +76,44 @@ export default function Dashboard() {
 
   return (
     <div className="ps-app">
-      {/* Sidebar - Matching AnalysisJobs EXACTLY, populated with real user data */}
       <aside className="ps-sidebar">
         <div className="ps-brand">
           <div className="ps-logo-shield">🛡️</div>
           <span className="ps-brand-name">PaperScope AI</span>
         </div>
+
         <div className="ps-nav-section">
           <p className="ps-nav-label">NAVIGATION</p>
-          <Link to="/dashboard" className="ps-nav-link active">▦ Dashboard <span className="ps-chevron">›</span></Link>
+          <Link to="/dashboard" className="ps-nav-link active">
+            ▦ Dashboard <span className="ps-chevron">›</span>
+          </Link>
           <Link to="/dashboard/submit" className="ps-nav-link">⬆ Submit Paper</Link>
           <Link to="/dashboard/jobs" className="ps-nav-link">⏱ Analysis Jobs</Link>
           <Link to="/dashboard/history" className="ps-nav-link">🕘 History</Link>
           <Link to="/dashboard/profile" className="ps-nav-link">👤 Profile</Link>
         </div>
+
         <div className="ps-sidebar-footer">
           <div className="ps-user-card">
             <div className="ps-user-avatar">
-              {user.first_name?.[0] || ""}{user.last_name?.[0] || ""}
+              {user.first_name?.[0] || ""}
+              {user.last_name?.[0] || ""}
             </div>
             <div className="ps-user-meta">
               <p className="ps-user-name">{user.first_name} {user.last_name}</p>
               <p className="ps-user-email">{user.email}</p>
             </div>
           </div>
-          <button className="ps-btn-logout" onClick={handleLogout}>⎋ Sign Out</button>
+          <button className="ps-btn-logout" onClick={handleLogout}>
+            ⎋ Sign Out
+          </button>
         </div>
       </aside>
 
-      {/* Main Content Area - STRICTLY UNTOUCHED LOGIC */}
       <main className="ps-main">
         <div className="ps-topbar">
           <div />
-          <div className="ps-role-pill">Researcher</div>
+          <div className="ps-role-pill">{isAdmin ? "Admin" : "Researcher"}</div>
         </div>
 
         <div className="ps-content">
@@ -195,6 +195,7 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
+
           <div style={{ height: 18 }} />
         </div>
       </main>

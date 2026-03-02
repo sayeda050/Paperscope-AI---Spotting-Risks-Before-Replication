@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 import os
 import sys
+import certifi
+
+os.environ["SSL_CERT_FILE"] = certifi.where()
+os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
 
 def main():

@@ -1,20 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from "../../contexts/AuthContext.jsx";
-import { 
-  Shield, LayoutGrid, Users, FileText, Clock, 
-  Database, Cpu, AlertTriangle, User, LogOut, 
-  Search, ChevronRight 
-} from 'lucide-react';
+import { Search } from 'lucide-react';
+import './Dashboard.css';
 import './AdminUsers.css';
 
 export default function AdminUsers() {
-  const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, initializing } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Protect Admin Route
   useEffect(() => {
     if (!initializing) {
       if (!user) {
@@ -25,7 +20,6 @@ export default function AdminUsers() {
     }
   }, [user, initializing, navigate]);
 
-  // Hardcoded data based on the provided UI mockup
   const usersData = [
     { id: 1, name: 'Sarah Chen', email: 'admin@paperscope.ai', role: 'Admin', joined: '11/1/2024' },
     { id: 2, name: 'Alex Rivera', email: 'demo@paperscope.ai', role: 'User', joined: '12/15/2024' },
@@ -39,105 +33,56 @@ export default function AdminUsers() {
     u.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (initializing) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d9488]"></div>
-      </div>
-    );
-  }
-
-  if (!user) return null;
+  if (initializing) return null;
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
-  // Dynamically fetch user details
-  const initials = `${user?.first_name?.[0] || 'A'}${user?.last_name?.[0] || 'T'}`.toUpperCase();
-  const fullName = user?.first_name ? `${user.first_name} ${user.last_name}` : 'Anindita Tabassum';
-  const email = user?.email || 'anindita.lubaba@gmail.com';
-
   return (
-    <div className="admin-layout">
-      {/* Sidebar Navigation - Matches Image 2 */}
-      <aside className="admin-sidebar">
-        <div className="sidebar-brand">
-          <Shield className="brand-icon" />
-          <span>PaperScope AI</span>
+    <div className="ps-app">
+      {/* SIDEBAR - MATCHES ADMIN DASHBOARD EXACTLY */}
+      <aside className="ps-sidebar">
+        <div className="ps-brand">
+          <div className="ps-logo-shield">🛡️</div>
+          <span className="ps-brand-name">PaperScope AI</span>
         </div>
-
-        <div className="sidebar-section">ADMINISTRATION</div>
-        
-        <nav className="sidebar-nav">
-          <Link to="/dashboard/admin" className={`nav-item ${location.pathname === '/dashboard/admin' ? 'active' : ''}`}>
-            <LayoutGrid className="nav-icon" />
-            <span>Dashboard</span>
-          </Link>
-          
-          <Link to="/dashboard/admin/users" className={`nav-item ${location.pathname.includes('/users') ? 'active' : ''}`}>
-            <Users className="nav-icon" />
-            <span>Users</span>
-            <ChevronRight className="nav-chevron-active" size={16} />
-          </Link>
-
-          <Link to="/dashboard/admin/papers" className="nav-item">
-            <FileText className="nav-icon" />
-            <span>Papers</span>
-          </Link>
-
-          <Link to="/dashboard/jobs" className="nav-item">
-            <Clock className="nav-icon" />
-            <span>Jobs</span>
-          </Link>
-
-          <Link to="/dashboard/results" className="nav-item">
-            <Database className="nav-icon" />
-            <span>Results</span>
-          </Link>
-
-          <Link to="/dashboard/models" className="nav-item">
-            <Cpu className="nav-icon" />
-            <span>Models</span>
-          </Link>
-
-          <Link to="/dashboard/errors" className="nav-item">
-            <AlertTriangle className="nav-icon" />
-            <span>Error Logs</span>
-          </Link>
-
-          <Link to="/dashboard/profile" className="nav-item">
-            <User className="nav-icon" />
-            <span>Profile</span>
-          </Link>
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="user-profile">
-            <div className="avatar">{initials}</div>
-            <div className="user-info">
-              <span className="user-name">{fullName}</span>
-              <span className="user-email">{email}</span>
+        <div className="ps-nav-section">
+          <p className="ps-nav-label">ADMINISTRATION</p>
+          <Link to="/dashboard/admin" className="ps-nav-link">▦ Dashboard</Link>
+          <Link to="/dashboard/admin/users" className="ps-nav-link active">👥 Users <span className="ps-chevron">›</span></Link>
+          <Link to="/dashboard/admin/papers" className="ps-nav-link">📄 Papers</Link>
+          <Link to="/dashboard/admin/jobs" className="ps-nav-link">⏱ Jobs</Link>
+          <Link to="/dashboard/admin/results" className="ps-nav-link">🗄️ Results</Link>
+          <Link to="/dashboard/admin/models" className="ps-nav-link">💠 Models</Link>
+          <Link to="/dashboard/admin/errors" className="ps-nav-link">⚠️ Error Logs</Link>
+          <Link to="/dashboard/profile" className="ps-nav-link">👤 Profile</Link>
+        </div>
+        <div className="ps-sidebar-footer">
+          <div className="ps-user-card">
+            <div className="ps-user-avatar">
+              {user?.first_name?.[0] || ""}{user?.last_name?.[0] || ""}
+            </div>
+            <div className="ps-user-meta">
+              <p className="ps-user-name">{user?.first_name} {user?.last_name}</p>
+              <p className="ps-user-email">{user?.email}</p>
             </div>
           </div>
-          <button className="sign-out-btn" onClick={handleLogout}>
-            <LogOut className="nav-icon" />
-            <span>Sign Out</span>
-          </button>
+          <button className="ps-btn-logout" onClick={handleLogout}>⎋ Sign Out</button>
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <main className="admin-main">
-        <header className="admin-topbar">
-          <div className="topbar-spacer"></div>
-          <div className="admin-badge">Admin</div>
+      {/* Main Content Area - UNCHANGED */}
+      <main className="ps-main">
+        <header className="ps-topbar">
+          <div />
+          <div className="ps-role-pill ps-role-admin">Administrator</div>
         </header>
 
-        <div className="admin-content">
-          <h1 className="page-title">Manage Users</h1>
-          <p className="page-subtitle">View and manage all registered users.</p>
+        <div className="ps-content">
+          <h1 className="ps-title">Manage Users</h1>
+          <p className="ps-subtitle">View and manage all registered users.</p>
 
           <div className="search-container">
             <Search className="search-icon" />

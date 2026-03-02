@@ -1,47 +1,140 @@
-/* Custom CSS mapping to the PaperScope AI design language */
-
-.admin-table-row {
-  transition: all 0.2s ease-in-out;
+/* Admin Sidebar Styles */
+.admin-sidebar {
+  width: 260px;
+  background-color: #0f172a; /* Dark background */
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0; /* Prevent shrinking */
+  min-height: 100vh; /* Ensure full height */
 }
 
-.admin-table-row:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  border-bottom: 1px solid #1e293b;
 }
 
-/* Risk Badges */
-.risk-high {
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.2);
+.brand-icon {
+  color: #0d9488; /* Teal color */
+  width: 24px;
+  height: 24px;
 }
 
-.risk-medium {
-  background-color: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.2);
+.sidebar-section {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 24px 24px 12px 24px;
 }
 
-.risk-low {
-  background-color: rgba(16, 185, 129, 0.1);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.2);
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px;
+  flex: 1; /* Take available space */
 }
 
-/* Custom Webkit Scrollbar for Table */
-.overflow-x-auto::-webkit-scrollbar {
-  height: 8px;
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  color: #cbd5e1;
+  text-decoration: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
-.overflow-x-auto::-webkit-scrollbar-track {
+.nav-item:hover {
+  background-color: #1e293b;
+  color: #ffffff;
+}
+
+.nav-item.active {
+  background-color: #1e293b;
+  color: #0d9488; /* Teal active color */
+  font-weight: 500;
+}
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  margin-right: 12px;
+}
+
+.nav-chevron {
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  opacity: 0.8;
+}
+
+/* Sidebar Footer & User Profile */
+.sidebar-footer {
+  margin-top: auto;
+  border-top: 1px solid #1e293b;
+  padding: 20px 24px;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: #0d9488;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #f1f5f9;
+}
+
+.user-email {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.sign-out-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
   background: transparent;
+  border: none;
+  color: #cbd5e1;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 10px;
+  transition: color 0.2s;
 }
 
-.overflow-x-auto::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--border));
-  border-radius: 20px;
-}
-
-.overflow-x-auto::-webkit-scrollbar-thumb:hover {
-  background-color: hsl(var(--muted-foreground) / 0.5);
+.sign-out-btn:hover {
+  color: #ffffff;
 }

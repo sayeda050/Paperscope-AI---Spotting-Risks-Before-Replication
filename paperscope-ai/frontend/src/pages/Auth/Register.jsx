@@ -31,7 +31,7 @@ export default function Register() {
       setError('Password must be at least 6 characters');
       return;
     }
-    
+   
     setLoading(true);
     
     const res = await register({
@@ -44,7 +44,7 @@ export default function Register() {
     });
     
     setLoading(false);
-    
+   
     if (res.success) {
       navigate('/login');
     } else {

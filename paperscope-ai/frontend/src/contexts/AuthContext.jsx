@@ -3,6 +3,7 @@ import { registerUser, loginUser, getMe, logoutUser, googleLoginUser } from "../
 
 const AuthContext = createContext(null);
 
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [initializing, setInitializing] = useState(true);
@@ -22,6 +23,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     checkAuth();
   }, []);
+
 
   const register = async (payload) => {
     try {
@@ -66,6 +68,7 @@ export function AuthProvider({ children }) {
     }
   };
 
+
   const logout = async () => {
     try {
       await logoutUser();
@@ -75,6 +78,7 @@ export function AuthProvider({ children }) {
       setUser(null);
     }
   };
+
 
   const value = useMemo(
     () => ({
@@ -96,6 +100,7 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   );
 }
+
 
 export function useAuth() {
   const ctx = useContext(AuthContext);

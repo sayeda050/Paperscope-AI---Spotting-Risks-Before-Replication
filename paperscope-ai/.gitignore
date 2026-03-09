@@ -24,3 +24,11 @@ build/
 Thumbs.db
 
 .vite/
+# ===== ML heavy generated files =====
+ml_pipeline/data/raw/
+ml_pipeline/data/processed/extracted_text.jsonl
+ml_pipeline/data/processed/linked_with_pdfs.jsonl
+ml_pipeline/data/processed/unmatched_openreview.jsonl
+ml_pipeline/data/processed/labeled_dataset_backup.csv
+ml_pipeline/outputs/models/
+

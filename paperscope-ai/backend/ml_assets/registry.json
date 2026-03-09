@@ -1,7 +1,8 @@
 {
   "active_model": "tfidf_lr_v1",
-  "updated_at": "2026-03-07T05:51:55.876099+00:00",
+  "updated_at": "2026-03-09T09:32:06.148307+00:00",
   "available_models": [
     "tfidf_lr_v1"
-  ]
+  ],
+  "model_path": "C:\\Users\\ASUS\\OneDrive\\Desktop\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_lr_v1"
 }

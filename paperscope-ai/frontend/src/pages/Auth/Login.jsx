@@ -7,7 +7,7 @@ import './Login.css';
 export default function Login() {
   const { login, googleLogin } = useAuth();
   const navigate = useNavigate();
-  
+ 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -33,7 +33,7 @@ export default function Login() {
     });
     
     setLoading(false);
-    
+   
     if (res.success) {
       navigate('/dashboard');
     } else {

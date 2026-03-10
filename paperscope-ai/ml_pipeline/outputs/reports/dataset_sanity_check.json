@@ -1,0 +1,18 @@
+{
+  "rows": 23312,
+  "columns": 33,
+  "review_text_nonempty": 23018,
+  "decision_text_nonempty": 18744,
+  "duplicate_paper_uid": 0,
+  "label_counts": {
+    "LOW": 7771,
+    "HIGH": 7771,
+    "MEDIUM": 7770
+  },
+  "constant_columns": [
+    "source"
+  ],
+  "labeling_method_expected": "balanced_rank_qcut",
+  "label_score_mismatch_rows_current_method": 0,
+  "label_score_mismatch_rows_old_threshold_reference": 11036
+}

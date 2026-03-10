@@ -37,6 +37,14 @@ def load_test_data():
     df["model_text"] = df["model_text"].fillna("").astype(str)
     df["risk_label"] = df["risk_label"].fillna("").astype(str)
 
+    if "review_text" not in df.columns:
+        df["review_text"] = ""
+    if "decision_text" not in df.columns:
+        df["decision_text"] = ""
+
+    df["review_text"] = df["review_text"].fillna("").astype(str)
+    df["decision_text"] = df["decision_text"].fillna("").astype(str)
+
     df = df[df["model_text"].str.len() > 0]
     df = df[df["risk_label"].str.len() > 0]
 
@@ -46,15 +54,25 @@ def load_test_data():
     return df
 
 
+def build_input_text(df: pd.DataFrame):
+    texts = []
+    for _, row in df.iterrows():
+        model_text = row.get("model_text", "")
+        review_text = row.get("review_text", "")
+        decision_text = row.get("decision_text", "")
+
+        combined = f"{model_text} [REVIEW] {review_text} [DECISION] {decision_text}"
+        texts.append(combined.strip())
+    return texts
+
+
 def main():
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Load test data
     test_df = load_test_data()
-    X_test_text = test_df["model_text"].tolist()
+    X_test_text = build_input_text(test_df)
     y_test = test_df["risk_label"].tolist()
 
-    # Load model artifacts
     if not VECTORIZER_PATH.exists():
         raise FileNotFoundError(f"Missing vectorizer: {VECTORIZER_PATH}")
     if not CLASSIFIER_PATH.exists():
@@ -66,12 +84,10 @@ def main():
     clf = joblib.load(CLASSIFIER_PATH)
     label_encoder = joblib.load(LABEL_ENCODER_PATH)
 
-    # Transform and predict
     X_test = vectorizer.transform(X_test_text)
     y_pred_numeric = clf.predict(X_test)
     y_pred = label_encoder.inverse_transform(y_pred_numeric)
 
-    # Metrics
     acc = accuracy_score(y_test, y_pred)
     report_text = classification_report(y_test, y_pred, digits=4, zero_division=0)
     report_dict = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
@@ -84,7 +100,6 @@ def main():
         columns=[f"pred_{x}" for x in labels],
     )
 
-    # Save files
     EVAL_TXT_PATH.write_text(
         f"Test accuracy: {acc:.4f}\n\n{report_text}",
         encoding="utf-8",

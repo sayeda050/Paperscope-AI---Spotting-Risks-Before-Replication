@@ -4,7 +4,7 @@ import json
 import joblib
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.preprocessing import LabelEncoder
 
@@ -25,30 +25,19 @@ TRAIN_REPORT_PATH = OUT_DIR / "train_report.json"
 
 
 def make_json_safe(obj):
-    """
-    Recursively convert Python / sklearn / numpy objects
-    into JSON-serializable values.
-    """
     if obj is None or isinstance(obj, (str, int, float, bool)):
         return obj
-
     if isinstance(obj, Path):
         return str(obj)
-
     if isinstance(obj, dict):
         return {str(k): make_json_safe(v) for k, v in obj.items()}
-
     if isinstance(obj, (list, tuple, set)):
         return [make_json_safe(v) for v in obj]
-
-    # numpy scalar support
     if hasattr(obj, "item"):
         try:
             return obj.item()
         except Exception:
             pass
-
-    # fallback for types / callables / other sklearn objects
     return str(obj)
 
 
@@ -67,6 +56,14 @@ def load_split(csv_path: Path) -> pd.DataFrame:
     df["model_text"] = df["model_text"].fillna("").astype(str)
     df["risk_label"] = df["risk_label"].fillna("").astype(str)
 
+    if "review_text" not in df.columns:
+        df["review_text"] = ""
+    if "decision_text" not in df.columns:
+        df["decision_text"] = ""
+
+    df["review_text"] = df["review_text"].fillna("").astype(str)
+    df["decision_text"] = df["decision_text"].fillna("").astype(str)
+
     df = df[df["model_text"].str.len() > 0]
     df = df[df["risk_label"].str.len() > 0]
 
@@ -74,6 +71,18 @@ def load_split(csv_path: Path) -> pd.DataFrame:
         raise ValueError(f"{csv_path.name} has no usable rows after cleaning.")
 
     return df
+
+
+def build_input_text(df: pd.DataFrame):
+    texts = []
+    for _, row in df.iterrows():
+        model_text = row.get("model_text", "")
+        review_text = row.get("review_text", "")
+        decision_text = row.get("decision_text", "")
+
+        combined = f"{model_text} [REVIEW] {review_text} [DECISION] {decision_text}"
+        texts.append(combined.strip())
+    return texts
 
 
 def evaluate_split(name, clf, X, y_true_labels, label_encoder):
@@ -104,9 +113,9 @@ def main():
     val_df = load_split(VAL_CSV)
     test_df = load_split(TEST_CSV)
 
-    X_train_text = train_df["model_text"].tolist()
-    X_val_text = val_df["model_text"].tolist()
-    X_test_text = test_df["model_text"].tolist()
+    X_train_text = build_input_text(train_df)
+    X_val_text = build_input_text(val_df)
+    X_test_text = build_input_text(test_df)
 
     y_train_labels = train_df["risk_label"].tolist()
     y_val_labels = val_df["risk_label"].tolist()
@@ -121,7 +130,7 @@ def main():
         ngram_range=(1, 2),
         min_df=2,
         max_df=0.95,
-        max_features=50000,
+        max_features=80000,
         sublinear_tf=True,
     )
 
@@ -129,9 +138,8 @@ def main():
     X_val = vectorizer.transform(X_val_text)
     X_test = vectorizer.transform(X_test_text)
 
-    clf = LogisticRegression(
-        max_iter=2000,
-        solver="lbfgs",
+    clf = LinearSVC(
+        C=1.0,
         class_weight="balanced",
         random_state=42,
     )
@@ -148,7 +156,8 @@ def main():
     metadata = {
         "model_name": "tfidf_lr_v1",
         "vectorizer_type": "TfidfVectorizer",
-        "classifier_type": "LogisticRegression",
+        "classifier_type": "LinearSVC",
+        "input_text": "model_text + review_text + decision_text",
         "train_rows": int(len(train_df)),
         "val_rows": int(len(val_df)),
         "test_rows": int(len(test_df)),

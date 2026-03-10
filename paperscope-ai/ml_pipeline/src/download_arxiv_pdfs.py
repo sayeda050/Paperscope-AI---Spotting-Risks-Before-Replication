@@ -1,65 +1,62 @@
 import sys
 from pathlib import Path
-import requests
-from tqdm import tqdm
+import json
 
 SRC_DIR = Path(__file__).resolve().parent
 if str(SRC_DIR) not in sys.path:
-   sys.path.append(str(SRC_DIR))
+    sys.path.append(str(SRC_DIR))
 
-from utils import read_jsonl, write_jsonl, ensure_dir, safe_filename
+from utils import read_jsonl, write_jsonl, ensure_dir
 
 PIPELINE_DIR = SRC_DIR.parent
-IN_FILE = PIPELINE_DIR / "data" / "processed" / "linked.jsonl"
+IN_FILE = PIPELINE_DIR / "data" / "raw" / "openreview_raw.jsonl"
 OUT_FILE = PIPELINE_DIR / "data" / "processed" / "linked_with_pdfs.jsonl"
-PDF_DIR = PIPELINE_DIR / "data" / "raw" / "pdfs"
-
-HEADERS = {
-   "User-Agent": "PaperScopeAI-PDFDownloader/1.0 (research-use)"
-}
-
-
-def download_pdf(url: str, out_path: Path):
-   out_path.parent.mkdir(parents=True, exist_ok=True)
-   with requests.get(url, headers=HEADERS, stream=True, timeout=120) as r:
-       r.raise_for_status()
-       with out_path.open("wb") as f:
-           for chunk in r.iter_content(chunk_size=8192):
-               if chunk:
-                   f.write(chunk)
+REPORT_FILE = PIPELINE_DIR / "outputs" / "reports" / "openreview_pdf_download_report.json"
 
 
 def main():
-   ensure_dir(PDF_DIR)
-   rows = read_jsonl(IN_FILE)
-   updated = []
+    ensure_dir(OUT_FILE.parent)
+    ensure_dir(REPORT_FILE.parent)
 
-   for row in tqdm(rows, desc="Downloading arXiv PDFs"):
-       arxiv_id = row.get("arxiv_id", "")
-       title = row.get("title", "")
-       pdf_url = row.get("arxiv_pdf_url", "")
+    rows = read_jsonl(IN_FILE)
+    if not rows:
+        raise FileNotFoundError(
+            f"No input rows found in {IN_FILE}. Run collect_openreview.py first."
+        )
 
-       if not pdf_url and arxiv_id:
-           pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
+    updated = []
+    for row in rows:
+        row = dict(row)
 
-       filename = f"{safe_filename(arxiv_id or title)}.pdf"
-       pdf_path = PDF_DIR / filename
+        # Keep downstream compatibility
+        row["arxiv_id"] = row.get("arxiv_id", "") or row.get("direct_arxiv_id", "")
 
-       try:
-           if not pdf_path.exists():
-               download_pdf(pdf_url, pdf_path)
-           row["pdf_path"] = str(pdf_path.resolve())
-           row["pdf_downloaded"] = True
-       except Exception as e:
-           row["pdf_path"] = ""
-           row["pdf_downloaded"] = False
-           row["pdf_download_error"] = str(e)
+        # Intentionally skip downloading PDFs for now.
+        # extract_text.py can still build model_text from title + abstract.
+        row["pdf_path"] = ""
+        row["pdf_downloaded"] = False
+        row["pdf_download_source"] = "skipped_no_pdf_mode"
+        row["pdf_download_error"] = ""
 
-       updated.append(row)
+        updated.append(row)
 
-   write_jsonl(OUT_FILE, updated)
-   print(f"✅ PDF-downloaded metadata saved to: {OUT_FILE}")
+    write_jsonl(OUT_FILE, updated)
+
+    report = {
+        "mode": "no_pdf_fast_mode",
+        "input_rows": len(rows),
+        "rows_written": len(updated),
+        "downloaded_ok": 0,
+        "failed": 0,
+        "note": "PDF download intentionally skipped. Downstream extract_text.py will use title + abstract when pdf_path is empty."
+    }
+    REPORT_FILE.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+    print(f"✅ Metadata saved to: {OUT_FILE}")
+    print(f"✅ Report saved to: {REPORT_FILE}")
+    print(f"✅ Rows written: {len(updated)}")
+    print("✅ PDF downloading skipped intentionally (fast mode).")
 
 
 if __name__ == "__main__":
-   main()
+    main()

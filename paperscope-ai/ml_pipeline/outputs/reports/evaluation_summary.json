@@ -1,5 +1,5 @@
 {
-  "test_accuracy": 0.6595744680851063,
+  "test_accuracy": 0.5344778254649499,
   "labels": [
     "HIGH",
     "LOW",
@@ -7,37 +7,37 @@
   ],
   "classification_report": {
     "HIGH": {
-      "precision": 0.6666666666666666,
-      "recall": 0.625,
-      "f1-score": 0.6451612903225806,
-      "support": 32.0
+      "precision": 0.6026905829596413,
+      "recall": 0.5763293310463122,
+      "f1-score": 0.5892152564664621,
+      "support": 1166.0
     },
     "LOW": {
-      "precision": 0.78125,
-      "recall": 0.8064516129032258,
-      "f1-score": 0.7936507936507936,
-      "support": 31.0
+      "precision": 0.5342691990090834,
+      "recall": 0.5553648068669528,
+      "f1-score": 0.5446127946127947,
+      "support": 1165.0
     },
     "MEDIUM": {
-      "precision": 0.53125,
-      "recall": 0.5483870967741935,
-      "f1-score": 0.5396825396825397,
-      "support": 31.0
+      "precision": 0.4696321642429427,
+      "recall": 0.47164948453608246,
+      "f1-score": 0.47063866266609516,
+      "support": 1164.0
     },
-    "accuracy": 0.6595744680851063,
+    "accuracy": 0.5344778254649499,
     "macro avg": {
-      "precision": 0.6597222222222222,
-      "recall": 0.6599462365591398,
-      "f1-score": 0.6594982078853047,
-      "support": 94.0
+      "precision": 0.5355306487372224,
+      "recall": 0.5344478741497825,
+      "f1-score": 0.5348222379151173,
+      "support": 3495.0
     },
     "weighted avg": {
-      "precision": 0.6597960992907801,
-      "recall": 0.6595744680851063,
-      "f1-score": 0.6593456874857012,
-      "support": 94.0
+      "precision": 0.5355687198155391,
+      "recall": 0.5344778254649499,
+      "f1-score": 0.534856165409767,
+      "support": 3495.0
     }
   },
-  "test_rows": 94,
-  "model_dir": "C:\\Users\\ASUS\\OneDrive\\Desktop\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\tfidf_lr_v1"
+  "test_rows": 3495,
+  "model_dir": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\tfidf_lr_v1"
 }

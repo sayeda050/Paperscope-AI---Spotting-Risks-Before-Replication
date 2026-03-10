@@ -1,6 +1,0 @@
-{"title": "Efficient Transformers for Long-Context Retrieval", "abstract": "We propose a transformer architecture optimized for long context and retrieval tasks...", "label": 1}
-{"title": "Neural Ranking Models for Scholarly Search", "abstract": "A learning-to-rank approach for academic paper retrieval and recommendation...", "label": 1}
-{"title": "Open-domain QA with Dense Passage Retrieval", "abstract": "We investigate dense retrieval methods for open-domain question answering...", "label": 1}
-{"title": "A Survey of Graph Coloring Algorithms", "abstract": "This paper surveys classical graph coloring algorithms and complexity bounds...", "label": 0}
-{"title": "Quantum Circuits for Factoring", "abstract": "We present quantum circuit optimizations for integer factoring...", "label": 0}
-{"title": "Improving GAN Stability with Spectral Normalization", "abstract": "We study GAN training stability via spectral normalization and regularization...", "label": 0}

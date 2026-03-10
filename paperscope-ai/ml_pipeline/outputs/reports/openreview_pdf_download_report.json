@@ -1,0 +1,8 @@
+{
+  "mode": "no_pdf_fast_mode",
+  "input_rows": 23312,
+  "rows_written": 23312,
+  "downloaded_ok": 0,
+  "failed": 0,
+  "note": "PDF download intentionally skipped. Downstream extract_text.py will use title + abstract when pdf_path is empty."
+}

@@ -1,8 +1,0 @@
-{
-  "input_rows": 9998,
-  "linked_rows": 625,
-  "unmatched_rows": 9373,
-  "direct_id_matches": 0,
-  "title_fuzzy_matches": 625,
-  "match_threshold": 90
-}

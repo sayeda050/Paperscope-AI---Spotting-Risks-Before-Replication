@@ -24,11 +24,45 @@ build/
 Thumbs.db
 
 .vite/
-# ===== ML heavy generated files =====
-ml_pipeline/data/raw/
-ml_pipeline/data/processed/extracted_text.jsonl
-ml_pipeline/data/processed/linked_with_pdfs.jsonl
-ml_pipeline/data/processed/unmatched_openreview.jsonl
-ml_pipeline/data/processed/labeled_dataset_backup.csv
-ml_pipeline/outputs/models/
+# ----------------------------
+# ML raw bulky data
+# ----------------------------
+ml_pipeline/data/raw/openreview_raw.jsonl
+ml_pipeline/data/raw/pdfs/
 
+# ----------------------------
+# ML processed files
+# Ignore all by default, then re-include the 4 LFS-tracked CSVs
+# ----------------------------
+ml_pipeline/data/processed/*.jsonl
+ml_pipeline/data/processed/*.csv
+
+!ml_pipeline/data/processed/labeled_dataset.csv
+!ml_pipeline/data/processed/train.csv
+!ml_pipeline/data/processed/val.csv
+!ml_pipeline/data/processed/test.csv
+
+# Old backups
+ml_pipeline/data/processed/*old_imbalanced*.csv
+
+# ----------------------------
+# ML model outputs
+# ----------------------------
+ml_pipeline/outputs/models/
+ml_pipeline/outputs/model_artifacts/
+
+# ----------------------------
+# Backend exported model artifacts
+# ----------------------------
+backend/ml_assets/models/
+
+# Keep backend registry if needed
+!backend/ml_assets/registry.json
+
+# ----------------------------
+# Reports
+# ----------------------------
+!ml_pipeline/outputs/reports/
+!ml_pipeline/outputs/reports/*.txt
+!ml_pipeline/outputs/reports/*.json
+!ml_pipeline/outputs/reports/*.csv

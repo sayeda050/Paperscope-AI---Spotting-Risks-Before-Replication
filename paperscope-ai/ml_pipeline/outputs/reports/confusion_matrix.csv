@@ -1,4 +1,4 @@
 ,pred_HIGH,pred_LOW,pred_MEDIUM
-true_HIGH,20,0,12
-true_LOW,3,25,3
-true_MEDIUM,7,7,17
+true_HIGH,672,213,281
+true_LOW,179,647,339
+true_MEDIUM,264,351,549

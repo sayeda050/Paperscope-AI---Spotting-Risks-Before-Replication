@@ -1,0 +1,14 @@
+{
+  "total_rows_before_length_filter": 23312,
+  "label_summary": {
+    "labeling_method": "balanced_rank_qcut",
+    "label_counts": {
+      "LOW": 7771,
+      "HIGH": 7771,
+      "MEDIUM": 7770
+    },
+    "unique_risk_scores": 73,
+    "min_risk_score": 37.5,
+    "max_risk_score": 100.0
+  }
+}

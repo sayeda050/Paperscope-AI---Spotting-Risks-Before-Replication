@@ -1,8 +1,11 @@
 import sys
 from pathlib import Path
 import re
+import json
+
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 
 SRC_DIR = Path(__file__).resolve().parent
 if str(SRC_DIR) not in sys.path:
@@ -17,6 +20,7 @@ TRAIN_CSV = PIPELINE_DIR / "data" / "processed" / "train.csv"
 VAL_CSV = PIPELINE_DIR / "data" / "processed" / "val.csv"
 TEST_CSV = PIPELINE_DIR / "data" / "processed" / "test.csv"
 REPORT_DIR = PIPELINE_DIR / "outputs" / "reports"
+LABELING_SUMMARY = REPORT_DIR / "labeling_summary.json"
 
 
 POSITIVE_PATTERNS = {
@@ -112,11 +116,21 @@ NEGATIVE_WEIGHTS = {
     "review_insufficient_experiments": 1.0,
 }
 
+COMPILED_POSITIVE_PATTERNS = {
+    key: [re.compile(p, flags=re.I) for p in patterns]
+    for key, patterns in POSITIVE_PATTERNS.items()
+}
 
-def has_any_pattern(text: str, patterns):
+COMPILED_NEGATIVE_PATTERNS = {
+    key: [re.compile(p, flags=re.I) for p in patterns]
+    for key, patterns in NEGATIVE_PATTERNS.items()
+}
+
+
+def has_any_pattern(text: str, compiled_patterns):
     text = text or ""
-    for p in patterns:
-        if re.search(p, text, flags=re.I):
+    for pattern in compiled_patterns:
+        if pattern.search(text):
             return 1
     return 0
 
@@ -124,77 +138,105 @@ def has_any_pattern(text: str, patterns):
 def compute_features(row):
     model_text = clean_text(row.get("model_text", ""))
     review_text = clean_text(row.get("review_text", ""))
+    decision_text = clean_text(row.get("decision_text", ""))
+
+    reviewer_signal_text = clean_text(f"{review_text} {decision_text}")
 
     feats = {}
-    for key, patterns in POSITIVE_PATTERNS.items():
-        feats[key] = has_any_pattern(model_text, patterns)
 
-    for key, patterns in NEGATIVE_PATTERNS.items():
-        feats[key] = has_any_pattern(review_text, patterns)
+    for key, compiled_patterns in COMPILED_POSITIVE_PATTERNS.items():
+        feats[key] = has_any_pattern(model_text, compiled_patterns)
+
+    for key, compiled_patterns in COMPILED_NEGATIVE_PATTERNS.items():
+        feats[key] = has_any_pattern(reviewer_signal_text, compiled_patterns)
 
     return feats
 
 
-def score_and_label(feats):
+def score_only(feats):
     pos = sum(feats[k] * POSITIVE_WEIGHTS[k] for k in POSITIVE_WEIGHTS)
     neg = sum(feats[k] * NEGATIVE_WEIGHTS[k] for k in NEGATIVE_WEIGHTS)
 
     risk_score = 65 - (5 * pos) + (6 * neg)
     risk_score = round(clamp(risk_score, 0, 100), 2)
 
-    if risk_score < 40:
-        label = "LOW"
-    elif risk_score < 70:
-        label = "MEDIUM"
-    else:
-        label = "HIGH"
-
     weak_score = round(pos - neg, 2)
-    return weak_score, risk_score, label
+    return weak_score, risk_score
+
+
+def assign_labels(df: pd.DataFrame):
+    """
+    Force balanced 3-way labels using ranked risk scores.
+    This avoids score-tie collapse where MEDIUM becomes tiny.
+    """
+    scores = df["risk_score"].astype(float)
+    ranked_scores = scores.rank(method="first")
+
+    labels = pd.qcut(
+        ranked_scores,
+        q=3,
+        labels=["LOW", "MEDIUM", "HIGH"]
+    ).astype(str)
+
+    counts = labels.value_counts()
+
+    summary = {
+        "labeling_method": "balanced_rank_qcut",
+        "label_counts": {k: int(v) for k, v in counts.to_dict().items()},
+        "unique_risk_scores": int(scores.nunique()),
+        "min_risk_score": float(scores.min()),
+        "max_risk_score": float(scores.max()),
+    }
+
+    return labels.astype(str), summary
+
+
+def can_stratify(y: pd.Series) -> bool:
+    if y.nunique() <= 1:
+        return False
+    counts = y.value_counts()
+    return bool((counts >= 2).all())
 
 
 def split_and_save(df: pd.DataFrame):
     ensure_dir(TRAIN_CSV.parent)
 
-    # Safety: if model_text is missing, stop with clear message
     if "model_text" not in df.columns:
         raise RuntimeError(
             "Column 'model_text' not found. "
             "You must run extract_text.py successfully before build_labels.py."
         )
 
-    # Remove empty / tiny texts
     df = df[df["model_text"].fillna("").astype(str).str.len() > 300].copy()
 
     if len(df) == 0:
         raise RuntimeError(
             "No usable rows left after filtering. "
-            "Check extracted_text.jsonl and make sure PDFs were downloaded and text was extracted."
+            "Check extracted_text.jsonl and make sure extract_text.py ran correctly."
         )
 
-    # If too small, save all in train
     if len(df) < 20:
         df.to_csv(TRAIN_CSV, index=False)
         pd.DataFrame(columns=df.columns).to_csv(VAL_CSV, index=False)
         pd.DataFrame(columns=df.columns).to_csv(TEST_CSV, index=False)
         return
 
-    stratify = df["risk_label"] if df["risk_label"].nunique() > 1 else None
+    stratify_main = df["risk_label"] if can_stratify(df["risk_label"]) else None
 
     train_df, temp_df = train_test_split(
         df,
         test_size=0.30,
         random_state=42,
-        stratify=stratify,
+        stratify=stratify_main,
     )
 
-    temp_stratify = temp_df["risk_label"] if temp_df["risk_label"].nunique() > 1 else None
+    stratify_temp = temp_df["risk_label"] if can_stratify(temp_df["risk_label"]) else None
 
     val_df, test_df = train_test_split(
         temp_df,
         test_size=0.50,
         random_state=42,
-        stratify=temp_stratify,
+        stratify=stratify_temp,
     )
 
     train_df.to_csv(TRAIN_CSV, index=False)
@@ -210,9 +252,8 @@ def main():
             f"Input file not found: {IN_FILE}\n"
             f"Run these first:\n"
             f"1. python src\\collect_openreview.py\n"
-            f"2. python src\\link_arxiv.py\n"
-            f"3. python src\\download_arxiv_pdfs.py\n"
-            f"4. python src\\extract_text.py"
+            f"2. python src\\download_arxiv_pdfs.py\n"
+            f"3. python src\\extract_text.py"
         )
 
     rows = read_jsonl(IN_FILE)
@@ -224,8 +265,8 @@ def main():
         )
 
     out_rows = []
-    for row in rows:
-        # fallback if model_text missing
+
+    for row in tqdm(rows, desc="Building labels"):
         model_text = clean_text(row.get("model_text", ""))
 
         if not model_text:
@@ -238,7 +279,7 @@ def main():
         enriched_row["model_text"] = model_text
 
         feats = compute_features(enriched_row)
-        weak_score, risk_score, risk_label = score_and_label(feats)
+        weak_score, risk_score = score_only(feats)
 
         out_rows.append({
             "paper_uid": row.get("paper_uid", ""),
@@ -251,11 +292,11 @@ def main():
             "title": row.get("title", ""),
             "abstract": row.get("abstract", ""),
             "review_text": row.get("review_text", ""),
+            "decision_text": row.get("decision_text", ""),
             "model_text": model_text,
             **feats,
             "weak_score": weak_score,
             "risk_score": risk_score,
-            "risk_label": risk_label,
         })
 
     df = pd.DataFrame(out_rows)
@@ -264,6 +305,8 @@ def main():
         raise RuntimeError("No rows available to build labels.")
 
     df = df.drop_duplicates(subset=["paper_uid"]).reset_index(drop=True)
+
+    df["risk_label"], label_summary = assign_labels(df)
 
     ensure_dir(OUT_CSV.parent)
     df.to_csv(OUT_CSV, index=False)
@@ -285,11 +328,23 @@ def main():
     })
     feature_sums.to_csv(REPORT_DIR / "feature_counts.csv", index=False)
 
+    LABELING_SUMMARY.write_text(
+        json.dumps({
+            "total_rows_before_length_filter": int(len(df)),
+            "label_summary": label_summary,
+        }, indent=2),
+        encoding="utf-8",
+    )
+
     print(f"✅ Labeled dataset saved to: {OUT_CSV}")
     print(f"✅ Train split saved to: {TRAIN_CSV}")
     print(f"✅ Val split saved to: {VAL_CSV}")
     print(f"✅ Test split saved to: {TEST_CSV}")
     print(f"✅ Label distribution report saved to: {REPORT_DIR / 'label_distribution.csv'}")
+    print(f"✅ Feature count report saved to: {REPORT_DIR / 'feature_counts.csv'}")
+    print(f"✅ Labeling summary saved to: {LABELING_SUMMARY}")
+    print(f"✅ Total labeled rows: {len(df)}")
+    print("✅ Labeling complete.")
 
 
 if __name__ == "__main__":

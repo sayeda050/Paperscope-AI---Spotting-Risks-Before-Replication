@@ -1,5 +1,7 @@
-ICLR.cc/2025/Conference | submissions_found=3703
-ICLR.cc/2024/Conference | submissions_found=2260
-NeurIPS.cc/2024/Conference | submissions_found=4035
+ICLR.cc/2025/Conference | submissions_found=11672 | kept=11672 | with_review_text=11520 | with_decision_text=8728
+ICLR.cc/2024/Conference | submissions_found=7404 | kept=7404 | with_review_text=7262 | with_decision_text=5780
+NeurIPS.cc/2024/Conference | submissions_found=4236 | kept=4236 | with_review_text=4236 | with_decision_text=4236
 
-Total collected rows: 9998
+Total collected rows: 23312
+Rows with non-empty review_text: 23018
+Rows with non-empty decision_text: 18744

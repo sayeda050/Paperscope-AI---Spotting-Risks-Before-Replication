@@ -1,0 +1,65 @@
+{
+  "model_name": "feature_decision_tree_v1",
+  "test_accuracy": 0.8403433476394849,
+  "labels": [
+    "HIGH",
+    "LOW",
+    "MEDIUM"
+  ],
+  "classification_report": {
+    "HIGH": {
+      "precision": 0.9931428571428571,
+      "recall": 0.7452830188679245,
+      "f1-score": 0.8515433610975012,
+      "support": 1166.0
+    },
+    "LOW": {
+      "precision": 0.822316986496091,
+      "recall": 0.9931330472103004,
+      "f1-score": 0.8996889580093312,
+      "support": 1165.0
+    },
+    "MEDIUM": {
+      "precision": 0.7510305028854081,
+      "recall": 0.7826460481099656,
+      "f1-score": 0.7665124106015987,
+      "support": 1164.0
+    },
+    "accuracy": 0.8403433476394849,
+    "macro avg": {
+      "precision": 0.8554967821747854,
+      "recall": 0.8403540380627302,
+      "f1-score": 0.8392482432361437,
+      "support": 3495.0
+    },
+    "weighted avg": {
+      "precision": 0.8555660560958891,
+      "recall": 0.8403433476394849,
+      "f1-score": 0.8392725725495903,
+      "support": 3495.0
+    }
+  },
+  "test_rows": 3495,
+  "feature_columns": [
+    "has_code_link",
+    "has_data_link",
+    "has_hyperparams",
+    "has_seed",
+    "has_env_details",
+    "has_metrics",
+    "has_baselines",
+    "has_ablation",
+    "has_limitations",
+    "has_statistical_tests",
+    "review_missing_details",
+    "review_repro_concern",
+    "review_code_missing",
+    "review_dataset_unclear",
+    "review_hyperparams_unclear",
+    "review_missing_ablation",
+    "review_weak_baselines",
+    "review_insufficient_experiments"
+  ],
+  "metadata_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\feature_decision_tree_v1\\metadata.json",
+  "model_dir": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\feature_decision_tree_v1"
+}

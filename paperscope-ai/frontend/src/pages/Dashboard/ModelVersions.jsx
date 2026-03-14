@@ -6,26 +6,72 @@ import "./Dashboard.css";
 import "./AdminDashboard.css";
 import "./ModelVersions.css";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5173";
+
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) {
+    return parts.pop().split(";").shift();
+  }
+  return "";
+}
+
+async function apiRequest(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  const csrftoken = getCookie("csrftoken");
+
+  const headers = {
+    ...(options.headers || {}),
+  };
+
+  if (!(options.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && csrftoken) {
+    headers["X-CSRFToken"] = csrftoken;
+  }
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    method,
+    headers,
+    credentials: "include",
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  const data = contentType.includes("application/json")
+    ? await response.json()
+    : await response.text();
+
+  if (!response.ok) {
+    const message =
+      (typeof data === "object" && data?.detail) ||
+      (typeof data === "object" && data?.message) ||
+      "Request failed.";
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+function formatAccuracy(value) {
+  if (value === null || value === undefined) return "";
+  const pct = Number(value) * 100;
+  if (Number.isNaN(pct)) return "";
+  return `${pct.toFixed(2)}%`;
+}
+
 export default function ModelVersions() {
   const { user, logout, initializing } = useAuth();
   const navigate = useNavigate();
 
-  const [models, setModels] = useState([
-    {
-      id: 1,
-      name: "TF-IDF + LogReg v1.0",
-      createdAt: "11/30/2024",
-      active: true,
-    },
-    {
-      id: 2,
-      name: "TF-IDF + SVM v0.9-beta",
-      createdAt: "11/14/2024",
-      active: false,
-    },
-  ]);
-
+  const [models, setModels] = useState([]);
   const [toast, setToast] = useState("");
+  const [loadingModels, setLoadingModels] = useState(true);
+  const [busyModelId, setBusyModelId] = useState(null);
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
     if (!initializing) {
@@ -36,6 +82,13 @@ export default function ModelVersions() {
       }
     }
   }, [user, initializing, navigate]);
+
+  useEffect(() => {
+    if (!initializing && user && (user.is_superuser || user.role === "ADMIN")) {
+      loadModels();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initializing, user]);
 
   if (initializing) {
     return (
@@ -53,23 +106,57 @@ export default function ModelVersions() {
     navigate("/login");
   };
 
-  const handleSetActive = (id) => {
-    setModels((prev) =>
-      prev.map((model) => ({
-        ...model,
-        active: model.id === id,
-      }))
-    );
+  async function loadModels() {
+    setLoadingModels(true);
+    setPageError("");
 
-    setToast("Model activated");
+    try {
+      const data = await apiRequest("/api/analysis/models/");
+      setModels(data.models || []);
+    } catch (err) {
+      setPageError(err.message || "Failed to load models.");
+    } finally {
+      setLoadingModels(false);
+    }
+  }
 
-    setTimeout(() => {
-      setToast("");
-    }, 2500);
+  const handleSetActive = async (id) => {
+    setBusyModelId(id);
+    setPageError("");
+
+    try {
+      await apiRequest("/api/analysis/models/activate/", {
+        method: "POST",
+        body: JSON.stringify({ model_id: id }),
+      });
+
+      await loadModels();
+
+      setToast("Model activated");
+      setTimeout(() => setToast(""), 2500);
+    } catch (err) {
+      setPageError(err.message || "Failed to activate model.");
+    } finally {
+      setBusyModelId(null);
+    }
   };
 
-  const handleAddModel = () => {
-    alert("Open add model flow here.");
+  const handleAddModel = async () => {
+    setPageError("");
+
+    try {
+      await apiRequest("/api/analysis/models/refresh/", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+
+      await loadModels();
+
+      setToast("Model registry refreshed");
+      setTimeout(() => setToast(""), 2500);
+    } catch (err) {
+      setPageError(err.message || "Failed to refresh model registry.");
+    }
   };
 
   return (
@@ -151,44 +238,75 @@ export default function ModelVersions() {
               </button>
             </div>
 
-            <div className="model-list">
-              {models.map((model) => (
-                <div className="model-card" key={model.id}>
-                  <div className="model-card-left">
-                    <div className="model-icon-box">
-                      <Cpu size={22} />
-                    </div>
+            {pageError && (
+              <div className="model-error-banner">
+                {pageError}
+              </div>
+            )}
 
-                    <div className="model-info">
-                      <div className="model-title-row">
-                        <h2>{model.name}</h2>
-
-                        {model.active && (
-                          <span className="model-active-badge">
-                            <CheckCircle2 size={14} />
-                            <span>Active</span>
-                          </span>
-                        )}
-                      </div>
-
-                      <p>Created {model.createdAt}</p>
-                    </div>
+            {loadingModels ? (
+              <div className="model-card">
+                <div className="model-card-left">
+                  <div className="model-icon-box">
+                    <Cpu size={22} />
                   </div>
-
-                  <div className="model-card-right">
-                    {!model.active && (
-                      <button
-                        type="button"
-                        className="set-active-btn"
-                        onClick={() => handleSetActive(model.id)}
-                      >
-                        Set Active
-                      </button>
-                    )}
+                  <div className="model-info">
+                    <div className="model-title-row">
+                      <h2>Loading models...</h2>
+                    </div>
+                    <p>Please wait.</p>
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div className="model-list">
+                {models.map((model) => (
+                  <div className="model-card" key={model.id}>
+                    <div className="model-card-left">
+                      <div className="model-icon-box">
+                        <Cpu size={22} />
+                      </div>
+
+                      <div className="model-info">
+                        <div className="model-title-row">
+                          <h2>{model.name}</h2>
+
+                          {model.active && (
+                            <span className="model-active-badge">
+                              <CheckCircle2 size={14} />
+                              <span>Active</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <p>
+                          Created {model.createdAt}
+                          {model.modelType ? ` • ${model.modelType}` : ""}
+                          {model.metrics?.testAccuracy !== null &&
+                          model.metrics?.testAccuracy !== undefined
+                            ? ` • Test Acc ${formatAccuracy(model.metrics.testAccuracy)}`
+                            : ""}
+                          {model.status ? ` • ${model.status}` : ""}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="model-card-right">
+                      {!model.active && (
+                        <button
+                          type="button"
+                          className="set-active-btn"
+                          onClick={() => handleSetActive(model.id)}
+                          disabled={busyModelId === model.id}
+                        >
+                          {busyModelId === model.id ? "Activating..." : "Set Active"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {toast && (

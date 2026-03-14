@@ -60,6 +60,6 @@
     "review_weak_baselines",
     "review_insufficient_experiments"
   ],
-  "metadata_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\feature_random_forest_v1\\metadata.json",
-  "model_dir": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\feature_random_forest_v1"
+  "metadata_path": "C:\\Users\\Admin\\Documents\\Paperscope-AI---Spotting-Risks-Before-Replication\\paperscope-ai\\ml_pipeline\\outputs\\models\\feature_random_forest_v1\\metadata.json",
+  "model_dir": "C:\\Users\\Admin\\Documents\\Paperscope-AI---Spotting-Risks-Before-Replication\\paperscope-ai\\ml_pipeline\\outputs\\models\\feature_random_forest_v1"
 }

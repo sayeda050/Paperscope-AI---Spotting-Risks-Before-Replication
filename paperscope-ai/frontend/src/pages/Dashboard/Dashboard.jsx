@@ -1,14 +1,33 @@
-﻿import React, { useEffect } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { getUserDashboard } from "../../api/analysis.api.js";
 import "./Dashboard.css";
+
+function mapDashboardStatus(status) {
+  if (status === "DONE") return "COMPLETED";
+  return String(status || "").toUpperCase();
+}
+
+function mapDashboardRiskLabel(label) {
+  if (label === "Low") return "LOW";
+  if (label === "Med") return "MEDIUM";
+  if (label === "High") return "HIGH";
+  return label || null;
+}
 
 export default function Dashboard() {
   const { user, logout, initializing } = useAuth();
   const navigate = useNavigate();
-
-  // If logged-in user is actually an admin, send them to admin dashboard
   const isAdmin = user?.is_superuser || user?.role === "ADMIN";
+
+  const [stats, setStats] = useState({
+    total_papers: 0,
+    completed_jobs: 0,
+    in_progress_jobs: 0,
+    failed_jobs: 0,
+  });
+  const [recentJobs, setRecentJobs] = useState([]);
 
   useEffect(() => {
     if (!initializing) {
@@ -19,6 +38,13 @@ export default function Dashboard() {
       }
     }
   }, [user, initializing, isAdmin, navigate]);
+
+  useEffect(() => {
+    if (!initializing && user && !isAdmin) {
+      loadDashboard();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initializing, user, isAdmin]);
 
   if (initializing) {
     return (
@@ -36,24 +62,45 @@ export default function Dashboard() {
     navigate("/login");
   };
 
-  const mockPapers = [
-    { id: "p1", userId: user.user_id, title: "Deep Learning for Protein Folding: A Reproducibility Study" },
-    { id: "p2", userId: user.user_id, title: "Attention Mechanisms in Low-Resource NLP" },
-    { id: "p3", userId: user.user_id, title: "Statistical Methods for Climate Model Validation" },
-    { id: "p4", userId: user.user_id, title: "Generative Adversarial Networks for Medical Imaging" },
-  ];
+  async function loadDashboard() {
+    try {
+      const data = await getUserDashboard();
 
-  const mockJobs = [
-    { id: "j1", userId: user.user_id, status: "COMPLETED", paperTitle: mockPapers[0].title, createdAt: "2025-01-10T12:00:00Z", riskLabel: "HIGH", riskScore: 0.72 },
-    { id: "j2", userId: user.user_id, status: "COMPLETED", paperTitle: mockPapers[1].title, createdAt: "2025-01-15T12:00:00Z", riskLabel: "LOW", riskScore: 0.34 },
-    { id: "j3", userId: user.user_id, status: "FAILED", paperTitle: mockPapers[2].title, createdAt: "2025-01-22T12:00:00Z", riskLabel: null, riskScore: null },
-    { id: "j4", userId: user.user_id, status: "QUEUED", paperTitle: mockPapers[3].title, createdAt: "2025-02-10T12:00:00Z", riskLabel: null, riskScore: null },
-  ];
+      setStats({
+        total_papers: Number(data?.stats?.total_papers || 0),
+        completed_jobs: Number(data?.stats?.completed_jobs || 0),
+        in_progress_jobs: Number(data?.stats?.in_progress_jobs || 0),
+        failed_jobs: Number(data?.stats?.failed_jobs || 0),
+      });
 
-  const totalPapers = mockPapers.length;
-  const completed = mockJobs.filter((j) => j.status === "COMPLETED").length;
-  const inProgress = mockJobs.filter((j) => j.status === "QUEUED" || j.status === "PROCESSING").length;
-  const failed = mockJobs.filter((j) => j.status === "FAILED").length;
+      const normalizedJobs = (data?.recent_jobs || []).map((job) => ({
+        id: job.job_id,
+        status: mapDashboardStatus(job.status),
+        paperTitle: job.paper_title || "Untitled Paper",
+        createdAt: job.created_at,
+        riskLabel: mapDashboardRiskLabel(job?.result?.risk_label),
+        riskScore:
+          job?.result?.risk_score !== undefined && job?.result?.risk_score !== null
+            ? Number(job.result.risk_score) / 100
+            : null,
+      }));
+
+      setRecentJobs(normalizedJobs);
+    } catch (error) {
+      setStats({
+        total_papers: 0,
+        completed_jobs: 0,
+        in_progress_jobs: 0,
+        failed_jobs: 0,
+      });
+      setRecentJobs([]);
+    }
+  }
+
+  const totalPapers = stats.total_papers;
+  const completed = stats.completed_jobs;
+  const inProgress = stats.in_progress_jobs;
+  const failed = stats.failed_jobs;
 
   const quickActions = [
     { label: "Upload PDF", desc: "Submit a paper for analysis", to: "/dashboard/submit", icon: "⬆️" },
@@ -135,7 +182,7 @@ export default function Dashboard() {
               <div>
                 <p className="ps-stat-title">Completed</p>
                 <p className="ps-stat-value">{completed}</p>
-                <p className="ps-trend ps-trend-positive">↑ Live data active</p>
+                <p className="ps-trend ps-trend-positive">Live system data</p>
               </div>
               <div className="ps-stat-icon">✅</div>
             </div>
@@ -180,19 +227,30 @@ export default function Dashboard() {
             </div>
 
             <div className="ps-jobs-list">
-              {mockJobs.slice(0, 4).map((job) => (
-                <div key={job.id} className="ps-job-row">
+              {recentJobs.length === 0 ? (
+                <div className="ps-job-row">
                   <div className="ps-job-left">
-                    <div className="ps-job-title">{job.paperTitle}</div>
-                    <div className="ps-job-date">{new Date(job.createdAt).toLocaleDateString()}</div>
-                  </div>
-
-                  <div className="ps-job-right">
-                    {job.riskLabel && <RiskBadge label={job.riskLabel} score={job.riskScore} />}
-                    <StatusBadge status={job.status} />
+                    <div className="ps-job-title">No analysis jobs yet.</div>
+                    <div className="ps-job-date">Submit a paper to get started.</div>
                   </div>
                 </div>
-              ))}
+              ) : (
+                recentJobs.slice(0, 4).map((job) => (
+                  <div key={job.id} className="ps-job-row">
+                    <div className="ps-job-left">
+                      <div className="ps-job-title">{job.paperTitle}</div>
+                      <div className="ps-job-date">
+                        {job.createdAt ? new Date(job.createdAt).toLocaleDateString() : "—"}
+                      </div>
+                    </div>
+
+                    <div className="ps-job-right">
+                      {job.riskLabel && <RiskBadge label={job.riskLabel} score={job.riskScore} />}
+                      <StatusBadge status={job.status} />
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 

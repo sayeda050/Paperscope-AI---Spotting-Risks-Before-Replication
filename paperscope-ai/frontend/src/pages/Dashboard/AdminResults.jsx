@@ -1,14 +1,23 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { getAdminResults } from "../../api/analysis.api.js";
 import "./Dashboard.css";
 import "./AdminDashboard.css";
 import "./AdminResults.css";
 
+function formatRiskLevel(label) {
+  if (label === "High") return "High Risk";
+  if (label === "Med") return "Medium Risk";
+  if (label === "Low") return "Low Risk";
+  return "Low Risk";
+}
+
 export default function AdminResults() {
   const { user, logout, initializing } = useAuth();
   const navigate = useNavigate();
+  const [results, setResults] = useState([]);
 
   useEffect(() => {
     if (!initializing) {
@@ -19,6 +28,12 @@ export default function AdminResults() {
       }
     }
   }, [user, initializing, navigate]);
+
+  useEffect(() => {
+    if (!initializing && user && (user.is_superuser || user.role === "ADMIN")) {
+      loadResults();
+    }
+  }, [initializing, user]);
 
   if (initializing) {
     return (
@@ -36,40 +51,22 @@ export default function AdminResults() {
     navigate("/login");
   };
 
-  const results = [
-    {
-      id: "r1",
-      paper: "Deep Learning for Protein Folding: A Reproducibility Study",
-      score: 72,
-      level: "High Risk",
-      completed: "1/10/2025",
-      detailUrl: "/dashboard/admin/results/r1",
-    },
-    {
-      id: "r2",
-      paper: "Attention Mechanisms in Low-Resource NLP",
-      score: 34,
-      level: "Low Risk",
-      completed: "1/15/2025",
-      detailUrl: "/dashboard/admin/results/r2",
-    },
-    {
-      id: "r3",
-      paper: "Reinforcement Learning in Autonomous Navigation",
-      score: 55,
-      level: "Medium Risk",
-      completed: "2/14/2025",
-      detailUrl: "/dashboard/admin/results/r3",
-    },
-    {
-      id: "r4",
-      paper: "Generative Adversarial Networks for Medical Imaging",
-      score: 67,
-      level: "High Risk",
-      completed: "2/18/2025",
-      detailUrl: "/dashboard/admin/results/r4",
-    },
-  ];
+  async function loadResults() {
+    try {
+      const data = await getAdminResults();
+      const normalized = (data?.results || []).map((result) => ({
+        id: result.result_id,
+        paper: result.paper_title || "Untitled Paper",
+        score: Math.round(Number(result.risk_score || 0)),
+        level: formatRiskLevel(result.risk_label),
+        completed: result.completed_at ? new Date(result.completed_at).toLocaleDateString() : "—",
+        detailUrl: `/dashboard/admin/results/${result.result_id}`,
+      }));
+      setResults(normalized);
+    } catch (error) {
+      setResults([]);
+    }
+  }
 
   const getRiskClass = (level) => {
     if (level === "High Risk") return "admin-result-pill high";
@@ -158,29 +155,35 @@ export default function AdminResults() {
                     </tr>
                   </thead>
                   <tbody>
-                    {results.map((result) => (
-                      <tr key={result.id}>
-                        <td className="paper-cell">
-                          <span className="paper-title-text">{result.paper}</span>
-                        </td>
-                        <td className="score-cell">{result.score}/100</td>
-                        <td>
-                          <span className={getRiskClass(result.level)}>
-                            {result.level}
-                          </span>
-                        </td>
-                        <td className="date-cell">{result.completed}</td>
-                        <td className="detail-cell">
-                          <Link
-                            to={result.detailUrl}
-                            className="detail-icon-btn"
-                            aria-label={`View result for ${result.paper}`}
-                          >
-                            <Eye size={18} />
-                          </Link>
-                        </td>
+                    {results.length === 0 ? (
+                      <tr>
+                        <td colSpan="5">No analysis results found.</td>
                       </tr>
-                    ))}
+                    ) : (
+                      results.map((result) => (
+                        <tr key={result.id}>
+                          <td className="paper-cell">
+                            <span className="paper-title-text">{result.paper}</span>
+                          </td>
+                          <td className="score-cell">{result.score}/100</td>
+                          <td>
+                            <span className={getRiskClass(result.level)}>
+                              {result.level}
+                            </span>
+                          </td>
+                          <td className="date-cell">{result.completed}</td>
+                          <td className="detail-cell">
+                            <Link
+                              to={result.detailUrl}
+                              className="detail-icon-btn"
+                              aria-label={`View result for ${result.paper}`}
+                            >
+                              <Eye size={18} />
+                            </Link>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

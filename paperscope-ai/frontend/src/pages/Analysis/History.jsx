@@ -1,43 +1,71 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { getUserHistory } from "../../api/analysis.api.js";
 import "./History.css";
 
 // Icons
 const SearchIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>;
 const EyeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>;
-const FilterIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>;
+
+function mapRiskLabel(label) {
+  if (label === "Low") return "Low";
+  if (label === "Med") return "Medium";
+  if (label === "High") return "High";
+  return "";
+}
 
 export default function History() {
   const { user, logout } = useAuth();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [riskFilter, setRiskFilter] = useState('all');
+  const [jobs, setJobs] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   if (!user) return null;
 
-  // Mock data integrated directly as per your previous logic
-  const mockJobs = [
-    { id: "j1", userId: "2", status: "DONE", paperTitle: "Deep Learning for Protein Folding: A Reproducibility Study", createdAt: "2025-01-10T12:00:00Z" },
-    { id: "j2", userId: "2", status: "DONE", paperTitle: "Attention Mechanisms in Low-Resource NLP", createdAt: "2025-01-15T12:00:00Z" },
-    { id: "j3", userId: "2", status: "FAILED", paperTitle: "Statistical Methods for Climate Model Validation", createdAt: "2025-01-22T12:00:00Z" },
-    { id: "j4", userId: "2", status: "QUEUED", paperTitle: "Generative Adversarial Networks for Medical Imaging", createdAt: "2025-02-10T12:00:00Z" },
-  ];
+  useEffect(() => {
+    loadHistory();
+  }, []);
 
-  const mockResults = [
-    { jobId: 'j1', riskScore: 72, riskLabel: 'High' },
-    { jobId: 'j2', riskScore: 24, riskLabel: 'Low' },
-  ];
+  async function loadHistory() {
+    try {
+      setLoading(true);
+      const data = await getUserHistory();
 
-  const filtered = mockJobs.filter(j => j.userId === '2').filter(j => {
-    if (search && !j.paperTitle?.toLowerCase().includes(search.toLowerCase())) return false;
-    if (statusFilter !== 'all' && j.status !== statusFilter) return false;
-    if (riskFilter !== 'all') {
-      const result = mockResults.find(r => r.jobId === j.id);
-      if (!result || result.riskLabel !== riskFilter) return false;
+      const normalized = (data?.history || []).map((job) => ({
+        id: String(job.job_id),
+        userId: String(job.user_id ?? user.user_id ?? ""),
+        status: String(job.status || ""),
+        paperTitle: job.paper_title || "Untitled Paper",
+        createdAt: job.created_at || null,
+        result: job.result
+          ? {
+              riskScore: Number(job.result.risk_score || 0),
+              riskLabel: mapRiskLabel(job.result.risk_label),
+            }
+          : null,
+      }));
+
+      setJobs(normalized);
+    } catch (error) {
+      setJobs([]);
+    } finally {
+      setLoading(false);
     }
-    return true;
-  });
+  }
+
+  const filtered = jobs
+    .filter(j => String(j.userId) === String(user.user_id))
+    .filter(j => {
+      if (search && !j.paperTitle?.toLowerCase().includes(search.toLowerCase())) return false;
+      if (statusFilter !== 'all' && j.status !== statusFilter) return false;
+      if (riskFilter !== 'all') {
+        if (!j.result || j.result.riskLabel !== riskFilter) return false;
+      }
+      return true;
+    });
 
   return (
     <div className="ps-dashboard-layout">
@@ -95,6 +123,7 @@ export default function History() {
               <option value="all">All Status</option>
               <option value="DONE">Completed</option>
               <option value="QUEUED">Queued</option>
+              <option value="PROCESSING">Processing</option>
               <option value="FAILED">Failed</option>
             </select>
             <select className="ps-select" value={riskFilter} onChange={e => setRiskFilter(e.target.value)}>
@@ -106,23 +135,29 @@ export default function History() {
           </div>
 
           <div className="ps-history-list">
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="ps-empty-state">
+                <p>Loading analysis history...</p>
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="ps-empty-state">
                 <p>No results match your filters.</p>
               </div>
             ) : (
               filtered.map(job => {
-                const result = mockResults.find(r => r.jobId === job.id);
+                const result = job.result;
                 return (
                   <div key={job.id} className="ps-history-card">
                     <div className="ps-history-info">
                       <p className="ps-history-title">{job.paperTitle}</p>
-                      <p className="ps-history-date">{new Date(job.createdAt).toLocaleDateString()}</p>
+                      <p className="ps-history-date">
+                        {job.createdAt ? new Date(job.createdAt).toLocaleDateString() : "—"}
+                      </p>
                     </div>
                     <div className="ps-history-actions">
                       {result && (
                         <span className={`ps-risk-tag ps-risk-${result.riskLabel.toLowerCase()}`}>
-                          {result.riskLabel} Risk ({result.riskScore})
+                          {result.riskLabel} Risk ({Math.round(result.riskScore)})
                         </span>
                       )}
                       <span className={`ps-status-tag ps-status-${job.status.toLowerCase()}`}>

@@ -334,6 +334,35 @@ def build_rich_feature_frame(payload, feature_columns):
     return df
 
 
+def _patch_classifier_for_runtime_compatibility(classifier):
+    """
+    Fixes missing attributes on pickled sklearn estimators when they are loaded
+    under a slightly different sklearn runtime.
+
+    This is critical for multi-model switching because different exported models
+    may have been trained/saved under slightly different sklearn behavior.
+    """
+    class_name = classifier.__class__.__name__
+
+    if class_name == "LogisticRegression":
+        if not hasattr(classifier, "multi_class"):
+            classifier.multi_class = "auto"
+        if not hasattr(classifier, "n_jobs"):
+            classifier.n_jobs = None
+        if not hasattr(classifier, "l1_ratio"):
+            classifier.l1_ratio = None
+
+    elif class_name == "LinearSVC":
+        if not hasattr(classifier, "break_ties"):
+            classifier.break_ties = False
+
+    elif class_name == "SVC":
+        if not hasattr(classifier, "break_ties"):
+            classifier.break_ties = False
+
+    return classifier
+
+
 def _load_model_bundle(model_spec):
     model_id = model_spec["id"]
     if model_id in _MODEL_CACHE:
@@ -346,9 +375,12 @@ def _load_model_bundle(model_spec):
     metadata = safe_read_json(model_dir / "metadata.json", {})
     pipeline_type = model_spec["pipelineType"]
 
+    classifier = joblib.load(model_dir / "classifier.joblib")
+    classifier = _patch_classifier_for_runtime_compatibility(classifier)
+
     bundle = {
         "pipelineType": pipeline_type,
-        "classifier": joblib.load(model_dir / "classifier.joblib"),
+        "classifier": classifier,
         "label_encoder": joblib.load(model_dir / "label_encoder.joblib"),
         "metadata": metadata,
     }
@@ -363,6 +395,19 @@ def _load_model_bundle(model_spec):
 
     _MODEL_CACHE[model_id] = bundle
     return bundle
+
+
+def _safe_predict_proba(classifier, X, label_encoder):
+    try:
+        if hasattr(classifier, "predict_proba"):
+            proba = classifier.predict_proba(X)[0]
+            class_names = label_encoder.classes_.tolist()
+            return {class_names[i]: float(proba[i]) for i in range(len(class_names))}
+    except Exception:
+        # Some switched models may still not support reliable proba under current runtime.
+        # In that case, keep prediction working and return empty probabilities.
+        return {}
+    return {}
 
 
 def predict_with_active_model(payload):
@@ -387,14 +432,16 @@ def predict_with_active_model(payload):
     else:
         raise ValueError(f"Unsupported pipelineType: {bundle['pipelineType']}")
 
-    pred_numeric = classifier.predict(X)[0]
-    pred_label = label_encoder.inverse_transform([pred_numeric])[0]
+    try:
+        pred_numeric = classifier.predict(X)[0]
+    except AttributeError as exc:
+        raise RuntimeError(
+            f"Active model '{model_spec['name']}' could not run prediction because its "
+            f"saved sklearn artifact is incompatible with the current runtime: {exc}"
+        ) from exc
 
-    probabilities = {}
-    if hasattr(classifier, "predict_proba"):
-        proba = classifier.predict_proba(X)[0]
-        class_names = label_encoder.classes_.tolist()
-        probabilities = {class_names[i]: float(proba[i]) for i in range(len(class_names))}
+    pred_label = label_encoder.inverse_transform([pred_numeric])[0]
+    probabilities = _safe_predict_proba(classifier, X, label_encoder)
 
     return {
         "model": {

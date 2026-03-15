@@ -1,16 +1,42 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../../contexts/AuthContext.jsx"; 
+import { useAuth } from "../../contexts/AuthContext.jsx";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from "recharts";
+import { getAdminDashboard } from "../../api/analysis.api.js";
 
-import "./Dashboard.css"; // Ensures the Sidebar styling matches exactly
+import "./Dashboard.css";
 import "./AdminDashboard.css";
+
+function formatChartDay(dayValue) {
+  if (!dayValue) return "";
+  const d = new Date(dayValue);
+  if (Number.isNaN(d.getTime())) return String(dayValue);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 export default function AdminDashboard() {
   const { user, logout, initializing } = useAuth();
   const navigate = useNavigate();
 
-  // Restricts regular users from accessing this page
+  const [stats, setStats] = useState({
+    total_users: 0,
+    total_papers: 0,
+    completed_jobs: 0,
+    error_logs: 0,
+  });
+  const [jobsByDay, setJobsByDay] = useState([]);
+  const [riskDist, setRiskDist] = useState([
+    { name: 'Low', value: 0, color: 'hsl(142, 76%, 36%)' },
+    { name: 'Medium', value: 0, color: 'hsl(38, 92%, 50%)' },
+    { name: 'High', value: 0, color: 'hsl(0, 72%, 51%)' },
+  ]);
+  const [statusDist, setStatusDist] = useState([
+    { name: 'Done', value: 0, colorClass: 'ps-text-done', icon: '✅' },
+    { name: 'Processing', value: 0, colorClass: 'ps-text-processing', icon: '🔄' },
+    { name: 'Queued', value: 0, colorClass: 'ps-text-queued', icon: '⏳' },
+    { name: 'Failed', value: 0, colorClass: 'ps-text-failed', icon: '❌' },
+  ]);
+
   useEffect(() => {
     if (!initializing) {
       if (!user) {
@@ -20,6 +46,12 @@ export default function AdminDashboard() {
       }
     }
   }, [user, initializing, navigate]);
+
+  useEffect(() => {
+    if (!initializing && user && (user.is_superuser || user.role === "ADMIN")) {
+      loadAdminDashboard();
+    }
+  }, [initializing, user]);
 
   if (initializing) {
     return (
@@ -37,40 +69,75 @@ export default function AdminDashboard() {
     navigate('/login');
   };
 
-  // --- UNTOUCHED MOCK DATA ---
-  const mockUsers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]; 
-  const mockPapers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]; 
-  const mockErrorLogs = [1, 2, 3]; 
+  async function loadAdminDashboard() {
+    try {
+      const data = await getAdminDashboard();
 
-  const mockJobs = [
-    { id: "j1", status: "DONE" }, { id: "j2", status: "DONE" }, { id: "j3", status: "DONE" },
-    { id: "j4", status: "DONE" }, { id: "j5", status: "DONE" }, { id: "j6", status: "PROCESSING" },
-    { id: "j7", status: "PROCESSING" }, { id: "j8", status: "QUEUED" }, { id: "j9", status: "FAILED" }
-  ];
+      setStats({
+        total_users: Number(data?.stats?.total_users || 0),
+        total_papers: Number(data?.stats?.total_papers || 0),
+        completed_jobs: Number(data?.stats?.completed_jobs || 0),
+        error_logs: Number(data?.stats?.error_logs || 0),
+      });
 
-  const jobsByDay = [
-    { day: 'Mon', count: 3 }, { day: 'Tue', count: 5 }, { day: 'Wed', count: 2 },
-    { day: 'Thu', count: 7 }, { day: 'Fri', count: 4 }, { day: 'Sat', count: 1 }, { day: 'Sun', count: 2 },
-  ];
+      setJobsByDay(
+        (data?.jobs_by_day || []).map((row) => ({
+          day: formatChartDay(row.day),
+          count: Number(row.count || 0),
+        }))
+      );
 
-  const riskDist = [
-    { name: 'Low', value: 12, color: 'hsl(142, 76%, 36%)' },
-    { name: 'Medium', value: 8, color: 'hsl(38, 92%, 50%)' },
-    { name: 'High', value: 5, color: 'hsl(0, 72%, 51%)' },
-  ];
+      setRiskDist([
+        {
+          name: 'Low',
+          value: Number((data?.risk_distribution || []).find((r) => r.name === "Low")?.value || 0),
+          color: 'hsl(142, 76%, 36%)',
+        },
+        {
+          name: 'Medium',
+          value: Number((data?.risk_distribution || []).find((r) => r.name === "Medium")?.value || 0),
+          color: 'hsl(38, 92%, 50%)',
+        },
+        {
+          name: 'High',
+          value: Number((data?.risk_distribution || []).find((r) => r.name === "High")?.value || 0),
+          color: 'hsl(0, 72%, 51%)',
+        },
+      ]);
 
-  const completedJobs = mockJobs.filter(j => j.status === 'DONE').length;
-  
-  const statusDist = [
-    { name: 'Done', value: completedJobs, colorClass: 'ps-text-done', icon: '✅' },
-    { name: 'Processing', value: mockJobs.filter(j => j.status === 'PROCESSING').length, colorClass: 'ps-text-processing', icon: '🔄' },
-    { name: 'Queued', value: mockJobs.filter(j => j.status === 'QUEUED').length, colorClass: 'ps-text-queued', icon: '⏳' },
-    { name: 'Failed', value: mockJobs.filter(j => j.status === 'FAILED').length, colorClass: 'ps-text-failed', icon: '❌' },
-  ];
+      const rawStatus = data?.status_distribution || [];
+      setStatusDist([
+        { name: 'Done', value: Number(rawStatus.find((s) => s.name === 'Done')?.value || 0), colorClass: 'ps-text-done', icon: '✅' },
+        { name: 'Processing', value: Number(rawStatus.find((s) => s.name === 'Processing')?.value || 0), colorClass: 'ps-text-processing', icon: '🔄' },
+        { name: 'Queued', value: Number(rawStatus.find((s) => s.name === 'Queued')?.value || 0), colorClass: 'ps-text-queued', icon: '⏳' },
+        { name: 'Failed', value: Number(rawStatus.find((s) => s.name === 'Failed')?.value || 0), colorClass: 'ps-text-failed', icon: '❌' },
+      ]);
+    } catch (error) {
+      setStats({
+        total_users: 0,
+        total_papers: 0,
+        completed_jobs: 0,
+        error_logs: 0,
+      });
+      setJobsByDay([]);
+      setRiskDist([
+        { name: 'Low', value: 0, color: 'hsl(142, 76%, 36%)' },
+        { name: 'Medium', value: 0, color: 'hsl(38, 92%, 50%)' },
+        { name: 'High', value: 0, color: 'hsl(0, 72%, 51%)' },
+      ]);
+      setStatusDist([
+        { name: 'Done', value: 0, colorClass: 'ps-text-done', icon: '✅' },
+        { name: 'Processing', value: 0, colorClass: 'ps-text-processing', icon: '🔄' },
+        { name: 'Queued', value: 0, colorClass: 'ps-text-queued', icon: '⏳' },
+        { name: 'Failed', value: 0, colorClass: 'ps-text-failed', icon: '❌' },
+      ]);
+    }
+  }
+
+  const completedJobs = stats.completed_jobs;
 
   return (
     <div className="ps-app">
-      {/* SIDEBAR - UPDATED TO EXACT ADMIN MENU */}
       <aside className="ps-sidebar">
         <div className="ps-brand">
           <div className="ps-logo-shield">🛡️</div>
@@ -101,7 +168,6 @@ export default function AdminDashboard() {
         </div>
       </aside>
 
-      {/* MAIN CONTENT AREA - STRICTLY UNTOUCHED */}
       <main className="ps-main">
         <div className="ps-topbar">
           <div />
@@ -118,8 +184,8 @@ export default function AdminDashboard() {
             <div className="ps-card ps-stat-card">
               <div>
                 <p className="ps-stat-title">Total Users</p>
-                <p className="ps-stat-value">{mockUsers.length}</p>
-                <p className="ps-trend ps-trend-positive">↑ +3 this month</p>
+                <p className="ps-stat-value">{stats.total_users}</p>
+                <p className="ps-trend ps-trend-positive">Live system data</p>
               </div>
               <div className="ps-stat-icon">👥</div>
             </div>
@@ -127,7 +193,7 @@ export default function AdminDashboard() {
             <div className="ps-card ps-stat-card">
               <div>
                 <p className="ps-stat-title">Total Papers</p>
-                <p className="ps-stat-value">{mockPapers.length}</p>
+                <p className="ps-stat-value">{stats.total_papers}</p>
               </div>
               <div className="ps-stat-icon">📄</div>
             </div>
@@ -143,7 +209,7 @@ export default function AdminDashboard() {
             <div className="ps-card ps-stat-card">
               <div>
                 <p className="ps-stat-title">Errors</p>
-                <p className="ps-stat-value">{mockErrorLogs.length}</p>
+                <p className="ps-stat-value">{stats.error_logs}</p>
               </div>
               <div className="ps-stat-icon ps-icon-error">⚠️</div>
             </div>

@@ -1,5 +1,5 @@
 {
-  "activeModelId": "feature_hist_gradient_boosting_rich_v1",
+  "activeModelId": "feature_random_forest_v1",
   "models": [
     {
       "id": "text_tfidf_lr_v1",
@@ -38,7 +38,7 @@
       "pipelineType": "feature_base_v1",
       "artifactSubdir": "feature_random_forest_v1",
       "createdAt": "03/12/2026",
-      "active": false,
+      "active": true,
       "status": "ready",
       "description": "Base feature model using Random Forest.",
       "metrics": {
@@ -83,7 +83,7 @@
       "pipelineType": "feature_rich_v1",
       "artifactSubdir": "feature_hist_gradient_boosting_rich_v1",
       "createdAt": "03/14/2026",
-      "active": true,
+      "active": false,
       "status": "ready",
       "description": "Rich feature model with derived engineered features.",
       "metrics": {

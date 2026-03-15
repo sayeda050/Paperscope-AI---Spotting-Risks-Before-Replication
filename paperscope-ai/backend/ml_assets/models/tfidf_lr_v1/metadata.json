@@ -1,10 +1,11 @@
 {
   "model_name": "tfidf_lr_v1",
   "vectorizer_type": "TfidfVectorizer",
-  "classifier_type": "LogisticRegression",
-  "train_rows": 437,
-  "val_rows": 94,
-  "test_rows": 94,
+  "classifier_type": "LinearSVC",
+  "input_text": "model_text + review_text + decision_text",
+  "train_rows": 16308,
+  "val_rows": 3495,
+  "test_rows": 3495,
   "label_classes": [
     "HIGH",
     "LOW",
@@ -19,7 +20,7 @@
     "input": "content",
     "lowercase": true,
     "max_df": 0.95,
-    "max_features": 50000,
+    "max_features": 80000,
     "min_df": 2,
     "ngram_range": [
       1,
@@ -39,17 +40,15 @@
   "classifier_params": {
     "C": 1.0,
     "class_weight": "balanced",
-    "dual": false,
+    "dual": "auto",
     "fit_intercept": true,
     "intercept_scaling": 1,
-    "l1_ratio": 0.0,
-    "max_iter": 2000,
-    "n_jobs": null,
-    "penalty": "deprecated",
+    "loss": "squared_hinge",
+    "max_iter": 1000,
+    "multi_class": "ovr",
+    "penalty": "l2",
     "random_state": 42,
-    "solver": "lbfgs",
     "tol": 0.0001,
-    "verbose": 0,
-    "warm_start": false
+    "verbose": 0
   }
 }

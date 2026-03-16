@@ -38,7 +38,12 @@ urlpatterns = [
     # Application APIs
     path("api/users/", include("apps.users.urls")),
     path("api/papers/", include("apps.papers.urls")),
+
+    # Existing analysis APIs
     path("api/analysis/", include("apps.analysis.urls")),
+
+    # Model registry / active model APIs
+    path("api/analysis/", include("apps.analysis.model_registry_urls")),
 ]
 
 

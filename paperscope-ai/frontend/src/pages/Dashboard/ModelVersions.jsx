@@ -6,7 +6,9 @@ import "./Dashboard.css";
 import "./AdminDashboard.css";
 import "./ModelVersions.css";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5173";
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ||
+  `http://${window.location.hostname}:8000`;
 
 function getCookie(name) {
   const value = `; ${document.cookie}`;
@@ -239,7 +241,16 @@ export default function ModelVersions() {
             </div>
 
             {pageError && (
-              <div className="model-error-banner">
+              <div
+                style={{
+                  marginBottom: "16px",
+                  padding: "12px 14px",
+                  borderRadius: "10px",
+                  background: "#fef2f2",
+                  color: "#991b1b",
+                  border: "1px solid #fecaca",
+                }}
+              >
                 {pageError}
               </div>
             )}

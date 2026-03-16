@@ -2,14 +2,11 @@
 
 // dj-rest-auth endpoints
 export async function registerUser(payload) {
-  // expected: { username, email, password1, password2 }
   const res = await http.post("/api/auth/registration/", payload);
   return res.data;
 }
 
 export async function loginUser(payload) {
-  // expected: { username, password }
-  // (username can be email too if your backend supports it via allauth)
   const res = await http.post("/api/auth/login/", payload);
   return res.data;
 }
@@ -36,13 +33,19 @@ export async function googleLoginUser(payload) {
 // FORGOT / RESET PASSWORD
 // ==========================================
 export async function forgotPassword(payload) {
-  // expected: { email }
   const res = await http.post("/api/users/forgot-password/", payload);
   return res.data;
 }
 
 export async function resetPassword(payload) {
-  // expected: { uid, token, new_password }
   const res = await http.post("/api/users/reset-password/", payload);
+  return res.data;
+}
+
+// ==========================================
+// CHANGE PASSWORD (LOGGED-IN USER)
+// ==========================================
+export async function changePassword(payload) {
+  const res = await http.post("/api/auth/password/change/", payload);
   return res.data;
 }

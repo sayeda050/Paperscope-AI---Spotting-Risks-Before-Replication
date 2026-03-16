@@ -1,6 +1,7 @@
 import React, { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { submitPdfPaper, submitArxivPaper } from "../../api/papers.api.js";
 import { Upload, Link as LinkIcon, FileText, X } from "lucide-react";
 import "./SubmitPaper.css";
 
@@ -40,10 +41,8 @@ export default function SubmitPaper() {
 
     setSelectedFile(file);
 
-    if (!paperTitle.trim()) {
-      const nameWithoutExtension = file.name.replace(/\.pdf$/i, "");
-      setPaperTitle(nameWithoutExtension);
-    }
+    // do NOT auto-fill from filename anymore
+    // backend now extracts the real title from the PDF itself if title is left empty
   };
 
   const onInputFileChange = (e) => {
@@ -77,10 +76,26 @@ export default function SubmitPaper() {
     setLoading(true);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const data = await submitPdfPaper({
+        title: paperTitle,
+        file: selectedFile,
+      });
+
+      const createdJobId = data?.job?.job_id;
+
       alert("Paper submitted for analysis successfully.");
+
+      if (createdJobId) {
+        navigate(`/dashboard/result/${createdJobId}`);
+      } else {
+        navigate("/dashboard/jobs");
+      }
     } catch (error) {
-      alert("Failed to submit paper.");
+      const message =
+        error?.response?.data?.detail ||
+        error?.response?.data?.error ||
+        "Failed to submit paper.";
+      alert(message);
     } finally {
       setLoading(false);
     }
@@ -97,10 +112,26 @@ export default function SubmitPaper() {
     setLoading(true);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const data = await submitArxivPaper({
+        title: paperTitle,
+        arxivLink,
+      });
+
+      const createdJobId = data?.job?.job_id;
+
       alert("arXiv paper submitted for analysis successfully.");
+
+      if (createdJobId) {
+        navigate(`/dashboard/result/${createdJobId}`);
+      } else {
+        navigate("/dashboard/jobs");
+      }
     } catch (error) {
-      alert("Failed to submit arXiv link.");
+      const message =
+        error?.response?.data?.detail ||
+        error?.response?.data?.error ||
+        "Failed to submit arXiv link.";
+      alert(message);
     } finally {
       setLoading(false);
     }

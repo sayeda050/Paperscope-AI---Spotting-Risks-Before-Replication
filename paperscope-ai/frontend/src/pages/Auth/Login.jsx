@@ -4,6 +4,46 @@ import { useAuth } from "../../contexts/AuthContext.jsx";
 import { Shield, Mail, Lock, Loader2 } from 'lucide-react';
 import './Login.css';
 
+function normalizeErrorMessage(err) {
+  if (!err) return 'Login failed. Please check your credentials.';
+
+  if (typeof err === 'string') return err;
+
+  if (Array.isArray(err)) {
+    return err.map((item) => normalizeErrorMessage(item)).join(' ');
+  }
+
+  if (typeof err === 'object') {
+    if (typeof err.detail === 'string') return err.detail;
+
+    if (Array.isArray(err.non_field_errors) && err.non_field_errors.length > 0) {
+      return err.non_field_errors.join(' ');
+    }
+
+    if (Array.isArray(err.email) && err.email.length > 0) {
+      return err.email.join(' ');
+    }
+
+    if (Array.isArray(err.username) && err.username.length > 0) {
+      return err.username.join(' ');
+    }
+
+    if (Array.isArray(err.password) && err.password.length > 0) {
+      return err.password.join(' ');
+    }
+
+    const flatValues = Object.values(err)
+      .flatMap((value) => (Array.isArray(value) ? value : [value]))
+      .filter((value) => typeof value === 'string');
+
+    if (flatValues.length > 0) {
+      return flatValues.join(' ');
+    }
+  }
+
+  return 'Invalid email or password.';
+}
+
 export default function Login() {
   const { login, googleLogin } = useAuth();
   const navigate = useNavigate();
@@ -13,8 +53,10 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Load the Google GSI script when the component mounts
   useEffect(() => {
+    const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+    if (existing) return;
+
     const script = document.createElement("script");
     script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
@@ -26,23 +68,28 @@ export default function Login() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    
-    const res = await login({
-      email: email,
-      password: password
-    });
-    
-    setLoading(false);
-   
-    if (res.success) {
-      navigate('/dashboard');
-    } else {
-      setError(res.error || 'Login failed. Please check your credentials.');
+
+    try {
+      const res = await login({
+        email: email,
+        password: password
+      });
+
+      if (res.success) {
+        navigate('/dashboard');
+      } else {
+        setError(normalizeErrorMessage(res.error));
+      }
+    } catch (err) {
+      setError(normalizeErrorMessage(err?.response?.data || err?.message));
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleGoogle = () => {
     setError('');
+
     if (!window.google) {
       setError('Google script is still loading. Please wait a second and try again.');
       return;
@@ -59,13 +106,18 @@ export default function Login() {
         
         if (response.access_token) {
           setLoading(true);
-          const res = await googleLogin(response.access_token);
-          setLoading(false);
-          
-          if (res.success) {
-            navigate('/dashboard');
-          } else {
-            setError(res.error || 'Google Login failed on server.');
+          try {
+            const res = await googleLogin(response.access_token);
+
+            if (res.success) {
+              navigate('/dashboard');
+            } else {
+              setError(normalizeErrorMessage(res.error));
+            }
+          } catch (err) {
+            setError(normalizeErrorMessage(err?.response?.data || err?.message));
+          } finally {
+            setLoading(false);
           }
         }
       },
@@ -75,7 +127,7 @@ export default function Login() {
   };
 
   return (
-    <div className="ps-register-page"> {/* Keeping your existing CSS class */}
+    <div className="ps-register-page">
       <div className="ps-register-card">
         
         <Link to="/" className="ps-register-brand">
@@ -90,10 +142,9 @@ export default function Login() {
 
         {error && <div className="ps-register-error">{error}</div>}
 
-        {/* FIXED: Added autoComplete="off" and hidden dummy fields to block browser autofill */}
         <form onSubmit={handleSubmit} className="ps-register-form" autoComplete="off">
-          <input type="text" style={{display: 'none'}} />
-          <input type="password" style={{display: 'none'}} />
+          <input type="text" style={{ display: 'none' }} />
+          <input type="password" style={{ display: 'none' }} />
 
           <div className="ps-field">
             <label htmlFor="email" className="ps-label">Email</label>
@@ -115,7 +166,12 @@ export default function Login() {
           <div className="ps-field">
             <div className="ps-label-row">
               <label htmlFor="password" className="ps-label">Password</label>
-              <Link to="/forgot-password" style={{ fontSize: '14px', color: '#0d9488', textDecoration: 'none' }}>Forgot password?</Link>
+              <Link
+                to="/forgot-password"
+                style={{ fontSize: '14px', color: '#0d9488', textDecoration: 'none' }}
+              >
+                Forgot password?
+              </Link>
             </div>
             <div className="ps-input-wrapper">
               <Lock className="ps-input-icon" size={16} />
@@ -156,7 +212,6 @@ export default function Login() {
         <p className="ps-register-footer">
           Don't have an account? <Link to="/register" className="ps-link">Create one</Link>
         </p>
-
       </div>
     </div>
   );

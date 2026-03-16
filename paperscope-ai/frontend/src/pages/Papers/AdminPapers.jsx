@@ -1,22 +1,22 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { getAdminPapers } from "../../api/papers.api.js";
 
 import "../Dashboard/Dashboard.css";
 import './AdminPapers.css';
 
-const mockPapers = [
-  { id: 1, title: 'Deep Learning for Protein Folding: A Repro...', submitter: 'Alex Rivera', source: 'PDF', uploaded: '1/10/2025' },
-  { id: 2, title: 'Attention Mechanisms in Low-Resource NLP', submitter: 'Alex Rivera', source: 'arXiv', uploaded: '1/15/2025' },
-  { id: 3, title: 'Statistical Methods for Climate Model Valid...', submitter: 'Alex Rivera', source: 'PDF', uploaded: '1/22/2025' },
-  { id: 4, title: 'Quantum Error Correction with Topological ...', submitter: 'Jane Park', source: 'arXiv', uploaded: '2/1/2025' },
-  { id: 5, title: 'Generative Adversarial Networks for Medic...', submitter: 'Alex Rivera', source: 'PDF', uploaded: '2/10/2025' },
-  { id: 6, title: 'Reinforcement Learning in Autonomous Na...', submitter: 'Mike Thompson', source: 'arXiv', uploaded: '2/14/2025' },
-];
+function formatSource(sourceType) {
+  const value = String(sourceType || "").toUpperCase();
+  if (value.includes("ARXIV")) return "arXiv";
+  if (value.includes("PDF")) return "PDF";
+  return sourceType || "Unknown";
+}
 
 export default function AdminPapers() {
   const { user, logout, initializing } = useAuth();
   const navigate = useNavigate();
+  const [papers, setPapers] = useState([]);
 
   useEffect(() => {
     if (!initializing) {
@@ -28,6 +28,12 @@ export default function AdminPapers() {
     }
   }, [user, initializing, navigate]);
 
+  useEffect(() => {
+    if (!initializing && user && (user.is_superuser || user.role === "ADMIN")) {
+      loadPapers();
+    }
+  }, [initializing, user]);
+
   if (initializing) return null;
   if (!user) return null;
 
@@ -36,9 +42,24 @@ export default function AdminPapers() {
     navigate('/login');
   };
 
+  async function loadPapers() {
+    try {
+      const data = await getAdminPapers();
+      const normalized = (data?.papers || []).map((paper) => ({
+        id: paper.paper_id,
+        title: paper.title,
+        submitter: paper.user_name || "Unknown User",
+        source: formatSource(paper.source_type),
+        uploaded: paper.uploaded_at ? new Date(paper.uploaded_at).toLocaleDateString() : "—",
+      }));
+      setPapers(normalized);
+    } catch (error) {
+      setPapers([]);
+    }
+  }
+
   return (
     <div className="ps-app">
-      {/* SIDEBAR - EXACT MATCH TO ADMIN DASHBOARD */}
       <aside className="ps-sidebar">
         <div className="ps-brand">
           <div className="ps-logo-shield">🛡️</div>
@@ -69,7 +90,6 @@ export default function AdminPapers() {
         </div>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
       <main className="ps-main">
         <div className="ps-topbar">
           <div />
@@ -93,16 +113,22 @@ export default function AdminPapers() {
                 </tr>
               </thead>
               <tbody>
-                {mockPapers.map((paper) => (
-                  <tr key={paper.id} className="job-row">
-                    <td className="paper-name">{paper.title}</td>
-                    <td>{paper.submitter}</td>
-                    <td>
-                      <span className="ps-pill ps-status-queued">{paper.source}</span>
-                    </td>
-                    <td>{paper.uploaded}</td>
+                {papers.length === 0 ? (
+                  <tr className="job-row">
+                    <td colSpan="4">No papers found.</td>
                   </tr>
-                ))}
+                ) : (
+                  papers.map((paper) => (
+                    <tr key={paper.id} className="job-row">
+                      <td className="paper-name">{paper.title}</td>
+                      <td>{paper.submitter}</td>
+                      <td>
+                        <span className="ps-pill ps-status-queued">{paper.source}</span>
+                      </td>
+                      <td>{paper.uploaded}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

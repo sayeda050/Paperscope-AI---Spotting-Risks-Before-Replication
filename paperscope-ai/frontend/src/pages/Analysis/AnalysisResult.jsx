@@ -1,45 +1,67 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { getUserResult } from "../../api/analysis.api.js";
 import "./AnalysisResult.css";
 
-// Icons matching AnalysisJobs for consistency
-const RefreshCw = () => <span>🔄</span>;
-const Eye = () => <span>👁️</span>;
+function mapRiskLabel(label) {
+  if (label === "Low") return "Low";
+  if (label === "Med") return "Medium";
+  if (label === "High") return "High";
+  return "Low";
+}
 
 export default function AnalysisResult() {
   const { jobId } = useParams();
   const { user, logout } = useAuth();
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   if (!user) return null;
 
-  const mockResults = [
-    {
-      jobId: 'j1',
-      paperTitle: 'Deep Learning for Protein Folding: A Reproducibility Study',
-      completedAt: '2025-01-10T15:05:00Z',
-      riskScore: 72,
-      riskLabel: 'High',
-      explanationJson: {
-        summary: 'This paper presents significant reproducibility risks due to missing dataset availability, lack of statistical rigor in reported results, and insufficient documentation of hyperparameter optimization.',
-        topFactors: [
-          'Missing dataset availability statement',
-          'No confidence intervals reported',
-          'Single random seed used',
-          'Hyperparameter search not documented'
-        ],
-        sections: [
-          { name: 'Methodology', score: 65, detail: 'Methods described at high level but lack implementation specifics' },
-          { name: 'Data Availability', score: 82, detail: 'No data sharing statement; proprietary dataset mentioned' },
-          { name: 'Statistical Rigor', score: 78, detail: 'Results reported without confidence intervals or variance' },
-          { name: 'Code Availability', score: 60, detail: 'GitHub link provided but repository is empty' }
-        ],
-        keywords: ['deep learning', 'protein folding', 'reproducibility', 'neural network', 'benchmark']
-      }
-    }
-  ];
+  useEffect(() => {
+    loadResult();
+  }, [jobId]);
 
-  const result = mockResults.find(r => r.jobId === jobId);
+  async function loadResult() {
+    try {
+      setLoading(true);
+      const data = await getUserResult(jobId);
+      const apiResult = data?.result;
+      const explanationJson = apiResult?.explanation_json || {};
+
+      setResult({
+        jobId: String(jobId),
+        paperTitle: data?.paper_title || 'Untitled Paper',
+        completedAt: apiResult?.completed_at || null,
+        riskScore: Number(apiResult?.risk_score || 0),
+        riskLabel: mapRiskLabel(apiResult?.risk_label),
+        explanationJson: {
+          summary: explanationJson.summary || 'No summary available.',
+          topFactors: Array.isArray(explanationJson.topFactors) ? explanationJson.topFactors : [],
+          sections: Array.isArray(explanationJson.sections) ? explanationJson.sections : [],
+          keywords: Array.isArray(explanationJson.keywords) ? explanationJson.keywords : [],
+        }
+      });
+    } catch (error) {
+      setResult(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="ps-dashboard-layout">
+        <main className="ps-main-content">
+          <p className="ps-muted-text">Loading result...</p>
+          <Link to="/dashboard/jobs" className="ps-btn-outline" style={{ marginTop: '16px' }}>
+             Back to Jobs
+          </Link>
+        </main>
+      </div>
+    );
+  }
 
   if (!result) {
     return (
@@ -59,7 +81,6 @@ export default function AnalysisResult() {
 
   return (
     <div className="ps-dashboard-layout">
-      {/* Sidebar - EXACT MATCH to AnalysisJobs.jsx */}
       <aside className="ps-sidebar">
         <div className="ps-brand">
           <div className="ps-logo-shield">🛡️</div>
@@ -99,13 +120,15 @@ export default function AnalysisResult() {
                ← Back
             </Link>
             <h1 className="ps-view-title">{result.paperTitle}</h1>
-            <p className="ps-view-subtitle">Analysis completed {new Date(result.completedAt).toLocaleString()}</p>
+            <p className="ps-view-subtitle">
+              Analysis completed {result.completedAt ? new Date(result.completedAt).toLocaleString() : "—"}
+            </p>
           </div>
 
           <div className="ps-grid-3 ps-mb-6">
             <div className="ps-card ps-card-shine ps-col-1 ps-text-center ps-p-6">
               <p className="ps-text-sm ps-muted-text ps-mb-2">Risk Score</p>
-              <p className={`ps-text-6xl ps-font-extrabold ${riskColor}`}>{result.riskScore}</p>
+              <p className={`ps-text-6xl ps-font-extrabold ${riskColor}`}>{Math.round(result.riskScore)}</p>
               <div className="ps-mt-3">
                 <span className={`ps-risk-badge ps-risk-badge-${result.riskLabel.toLowerCase()}`}>{result.riskLabel} Risk</span>
               </div>
@@ -142,10 +165,10 @@ export default function AnalysisResult() {
                   <div key={s.name}>
                     <div className="ps-flex-between ps-mb-1">
                       <span className="ps-text-sm ps-font-medium">{s.name}</span>
-                      <span className="ps-text-sm ps-muted-text">{s.score}/100</span>
+                      <span className="ps-text-sm ps-muted-text">{Number(s.score || 0)}/100</span>
                     </div>
                     <div className="ps-progress-track">
-                      <div className={`ps-progress-fill ${s.score < 40 ? 'ps-bg-risk-low' : s.score < 65 ? 'ps-bg-risk-medium' : 'ps-bg-risk-high'}`} style={{ width: `${s.score}%` }} />
+                      <div className={`ps-progress-fill ${Number(s.score || 0) < 40 ? 'ps-bg-risk-low' : Number(s.score || 0) < 65 ? 'ps-bg-risk-medium' : 'ps-bg-risk-high'}`} style={{ width: `${Number(s.score || 0)}%` }} />
                     </div>
                     <p className="ps-text-xs ps-muted-text ps-mt-1">{s.detail}</p>
                   </div>

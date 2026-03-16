@@ -3,15 +3,13 @@ import { registerUser, loginUser, getMe, logoutUser, googleLoginUser } from "../
 
 const AuthContext = createContext(null);
 
-
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [initializing, setInitializing] = useState(true);
 
-  // Checks if the user is logged in by asking the backend "Who am I?"
   const checkAuth = async () => {
     try {
-      const me = await getMe(); // Calls /api/users/me/
+      const me = await getMe();
       setUser(me);
     } catch (e) {
       setUser(null);
@@ -24,50 +22,55 @@ export function AuthProvider({ children }) {
     checkAuth();
   }, []);
 
-
   const register = async (payload) => {
     try {
       const data = await registerUser(payload);
       return { success: true, data };
     } catch (err) {
-      const msg = err?.response?.data ? JSON.stringify(err.response.data) : "Registration failed";
+      const msg = err?.response?.data
+        ? JSON.stringify(err.response.data)
+        : "Registration failed";
       return { success: false, error: msg };
     }
   };
 
-  // Inside AuthContext.jsx
   const login = async (payload) => {
     try {
-      const data = await loginUser(payload); // API call
-      
-      // 🚨 CRITICAL: You MUST set the state here before returning!
-      // If you skip this, PrivateRoute will kick the user out.
-      setUser(data.user); // Or however your backend returns user data
-      // FIXED: Removed setIsAuthed(true) because it does not exist and caused the crash!
-      
+      // Step 1: hit login endpoint so backend sets JWT cookies
+      await loginUser(payload);
+
+      // Step 2: verify cookie-based auth actually works
+      const me = await getMe();
+      setUser(me);
+
       return { success: true };
     } catch (err) {
-      return { success: false, error: err.response?.data };
+      setUser(null);
+      return {
+        success: false,
+        error: err?.response?.data || "Login failed",
+      };
     }
   };
 
   const googleLogin = async (accessToken) => {
     try {
-      // 1. MUST wrap the token in an object matching Django's expectation
-      const payload = { access_token: accessToken }; 
-      const data = await googleLoginUser(payload);
-      
-      // 2. 🚨 CRITICAL: Set state before returning so the router doesn't bounce you
-      setUser(data.user); 
-      // FIXED: Removed setIsAuthed(true) because it does not exist and caused the crash!
-      
+      const payload = { access_token: accessToken };
+
+      // Step 1: let backend set JWT cookies
+      await googleLoginUser(payload);
+
+      // Step 2: verify cookie-based auth actually works
+      const me = await getMe();
+      setUser(me);
+
       return { success: true };
     } catch (err) {
-      console.error("Google Auth Error:", err.response?.data);
+      setUser(null);
+      console.error("Google Auth Error:", err?.response?.data);
       return { success: false, error: "Google login failed on the server." };
     }
   };
-
 
   const logout = async () => {
     try {
@@ -79,17 +82,16 @@ export function AuthProvider({ children }) {
     }
   };
 
-
   const value = useMemo(
     () => ({
       user,
       initializing,
-      isAuthed: !!user, // You are authenticated if the 'user' object exists
+      isAuthed: !!user,
       register,
       login,
       googleLogin,
       logout,
-      checkAuth
+      checkAuth,
     }),
     [user, initializing]
   );
@@ -100,7 +102,6 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   );
 }
-
 
 export function useAuth() {
   const ctx = useContext(AuthContext);

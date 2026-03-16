@@ -1,23 +1,46 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { changePassword } from "../../api/auth.api.js";
 import "./Profile.css";
 
 // SVG Icons matching your dashboard UI
-const UserIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
-const LockIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
-const Loader2 = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ps-profile-spinner"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>;
+const UserIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+    <circle cx="12" cy="7" r="4"/>
+  </svg>
+);
+
+const LockIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+);
+
+const Loader2 = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ps-profile-spinner">
+    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+  </svg>
+);
 
 export default function Profile() {
   const { user, logout, updateProfile } = useAuth();
-  
+
   // Identify if the logged-in user is an Admin
   const isAdmin = user?.is_superuser || user?.role === 'ADMIN';
-  
-  // Logic to fetch info from logged-in user
+
+  // Personal info state
   const [firstName, setFirstName] = useState(user?.first_name || '');
   const [lastName, setLastName] = useState(user?.last_name || '');
   const [saving, setSaving] = useState(false);
+
+  // Password state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   // Re-sync if user object loads asynchronously
   useEffect(() => {
@@ -32,12 +55,65 @@ export default function Profile() {
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
-    await new Promise(r => setTimeout(r, 800));
-    if (updateProfile) {
-      updateProfile({ first_name: firstName, last_name: lastName });
+
+    try {
+      await new Promise(r => setTimeout(r, 800));
+      if (updateProfile) {
+        await updateProfile({ first_name: firstName, last_name: lastName });
+      }
+      alert('Profile updated successfully!');
+    } catch (error) {
+      alert('Failed to update profile.');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    alert('Profile updated successfully!');
+  };
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      alert("Please fill in all password fields.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      alert("New password and confirm password do not match.");
+      return;
+    }
+
+    setPasswordSaving(true);
+
+    try {
+      await changePassword({
+        old_password: currentPassword,
+        new_password1: newPassword,
+        new_password2: confirmPassword,
+      });
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      alert('Password updated successfully!');
+    } catch (error) {
+      const data = error?.response?.data;
+
+      if (typeof data === "string") {
+        alert(data);
+      } else if (data?.old_password?.[0]) {
+        alert(data.old_password[0]);
+      } else if (data?.new_password1?.[0]) {
+        alert(data.new_password1[0]);
+      } else if (data?.new_password2?.[0]) {
+        alert(data.new_password2[0]);
+      } else if (data?.detail) {
+        alert(data.detail);
+      } else {
+        alert('Failed to update password.');
+      }
+    } finally {
+      setPasswordSaving(false);
+    }
   };
 
   return (
@@ -48,10 +124,10 @@ export default function Profile() {
           <div className="ps-logo-shield">🛡️</div>
           <span className="ps-brand-name">PaperScope AI</span>
         </div>
-        
+
         <div className="ps-nav-section">
           <p className="ps-nav-label">{isAdmin ? "ADMINISTRATION" : "NAVIGATION"}</p>
-          
+
           {isAdmin ? (
             <>
               <Link to="/dashboard/admin" className="ps-nav-link">▦ Dashboard</Link>
@@ -91,13 +167,11 @@ export default function Profile() {
       <main className="ps-main-content">
         <header className="ps-top-bar">
           <div />
-          {/* Dynamically update the role badge as well to avoid confusion */}
           <span className={`ps-role-badge ${isAdmin ? 'ps-role-admin' : ''}`}>
             {isAdmin ? 'Administrator' : 'Researcher'}
           </span>
         </header>
 
-        {/* Isolated Scoped Area */}
         <div className="ps-page-container ps-profile-scope">
           <div className="ps-profile-heading">
             <h1 className="ps-profile-title">Profile</h1>
@@ -144,20 +218,40 @@ export default function Profile() {
                 <p className="ps-profile-card-desc">Update your password to keep your account secure.</p>
               </div>
               <div className="ps-profile-card-body">
-                <form className="ps-profile-form" onSubmit={e => e.preventDefault()}>
+                <form className="ps-profile-form" onSubmit={handlePasswordChange}>
                   <div className="ps-profile-group">
                     <label>Current Password</label>
-                    <input type="password" placeholder="••••••••" required />
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      required
+                    />
                   </div>
                   <div className="ps-profile-group">
                     <label>New Password</label>
-                    <input type="password" placeholder="Min 6 characters" required />
+                    <input
+                      type="password"
+                      placeholder="Min 6 characters"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                    />
                   </div>
                   <div className="ps-profile-group">
                     <label>Confirm New Password</label>
-                    <input type="password" placeholder="••••••••" required />
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                    />
                   </div>
-                  <button type="submit" className="ps-profile-submit-btn">Update Password</button>
+                  <button type="submit" className="ps-profile-submit-btn" disabled={passwordSaving}>
+                    {passwordSaving && <Loader2 />} Update Password
+                  </button>
                 </form>
               </div>
             </div>

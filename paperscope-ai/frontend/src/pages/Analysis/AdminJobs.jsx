@@ -1,33 +1,81 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from "../../contexts/AuthContext.jsx";
-import { RefreshCcw, ChevronDown } from 'lucide-react';
+import { RefreshCcw } from 'lucide-react';
+import { getAdminJobs, retryAdminJob } from "../../api/analysis.api.js";
 
-import "../Dashboard/Dashboard.css"; // Ensure this path points to your main dashboard CSS
+import "../Dashboard/Dashboard.css";
 import './AdminJobs.css';
+
+function formatStatusLabel(status) {
+  if (status === "DONE") return "Completed";
+  if (status === "FAILED") return "Failed";
+  if (status === "PROCESSING") return "Processing";
+  if (status === "QUEUED") return "Queued";
+  return status || "";
+}
 
 export default function AdminJobs() {
   const { user, logout, initializing } = useAuth();
   const navigate = useNavigate();
+  const [jobs, setJobs] = useState([]);
+  const [retryingJobId, setRetryingJobId] = useState(null);
+
+  useEffect(() => {
+    if (!initializing) {
+      if (!user) {
+        navigate('/login');
+      } else if (!user.is_superuser && user.role !== 'ADMIN') {
+        navigate('/dashboard');
+      }
+    }
+  }, [user, initializing, navigate]);
+
+  useEffect(() => {
+    if (!initializing && user && (user.is_superuser || user.role === "ADMIN")) {
+      loadJobs();
+    }
+  }, [initializing, user]);
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
-  // Mock data for analysis jobs
-  const [jobs] = useState([
-    { id: 1, paper: "Deep Learning for Protein Folding: A Reproducibility Study", user: "Alex Rivera", status: "Completed", created: "1/10/2025" },
-    { id: 2, paper: "Attention Mechanisms in Low-Resource NLP", user: "Alex Rivera", status: "Completed", created: "1/15/2025" },
-    { id: 3, paper: "Statistical Methods for Climate Model Validation", user: "Alex Rivera", status: "Failed", created: "1/22/2025" },
-    { id: 4, paper: "Quantum Error Correction with Topological Codes", user: "Jane Park", status: "Processing", created: "2/1/2025" },
-    { id: 5, paper: "Generative Adversarial Networks for Medical Imaging", user: "Alex Rivera", status: "Queued", created: "2/10/2025" },
-    { id: 6, paper: "Reinforcement Learning in Autonomous Navigation", user: "Mike Thompson", status: "Completed", created: "2/14/2025" },
-  ]);
+  async function loadJobs() {
+    try {
+      const data = await getAdminJobs();
+      const normalized = (data?.jobs || []).map((job) => ({
+        id: job.job_id,
+        paper: job.paper_title || "Untitled Paper",
+        user: job.user_name || "Unknown User",
+        status: formatStatusLabel(job.status),
+        created: job.created_at ? new Date(job.created_at).toLocaleDateString() : "—",
+      }));
+      setJobs(normalized);
+    } catch (error) {
+      setJobs([]);
+    }
+  }
+
+  async function handleRetry(jobId) {
+    try {
+      setRetryingJobId(jobId);
+      await retryAdminJob(jobId);
+      await loadJobs();
+    } catch (error) {
+      alert(
+        error?.response?.data?.detail ||
+        "Failed to retry the job."
+      );
+    } finally {
+      setRetryingJobId(null);
+    }
+  }
 
   const getStatusClass = (status) => {
     switch (status.toLowerCase()) {
-      case 'completed': case 'done': return 'badge-completed';
+      case 'completed': return 'badge-completed';
       case 'failed': return 'badge-failed';
       case 'processing': return 'badge-processing';
       case 'queued': return 'badge-queued';
@@ -40,7 +88,6 @@ export default function AdminJobs() {
 
   return (
     <div className="ps-app">
-      {/* SIDEBAR - EXACT MATCH TO ADMIN DASHBOARD */}
       <aside className="ps-sidebar">
         <div className="ps-brand">
           <div className="ps-logo-shield">🛡️</div>
@@ -71,7 +118,6 @@ export default function AdminJobs() {
         </div>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
       <main className="ps-main">
         <div className="ps-topbar">
           <div />
@@ -96,25 +142,35 @@ export default function AdminJobs() {
                 </tr>
               </thead>
               <tbody>
-                {jobs.map((job) => (
-                  <tr key={job.id} className="job-row">
-                    <td className="paper-name">{job.paper}</td>
-                    <td>{job.user}</td>
-                    <td>
-                      <span className={`status-badge ${getStatusClass(job.status)}`}>
-                        {job.status}
-                      </span>
-                    </td>
-                    <td>{job.created}</td>
-                    <td className="text-right">
-                      {job.status === 'Failed' && (
-                        <button className="retry-btn">
-                          <RefreshCcw size={14} /> Retry
-                        </button>
-                      )}
-                    </td>
+                {jobs.length === 0 ? (
+                  <tr className="job-row">
+                    <td colSpan="5">No jobs found.</td>
                   </tr>
-                ))}
+                ) : (
+                  jobs.map((job) => (
+                    <tr key={job.id} className="job-row">
+                      <td className="paper-name">{job.paper}</td>
+                      <td>{job.user}</td>
+                      <td>
+                        <span className={`status-badge ${getStatusClass(job.status)}`}>
+                          {job.status}
+                        </span>
+                      </td>
+                      <td>{job.created}</td>
+                      <td className="text-right">
+                        {job.status === 'Failed' && (
+                          <button
+                            className="retry-btn"
+                            onClick={() => handleRetry(job.id)}
+                            disabled={retryingJobId === job.id}
+                          >
+                            <RefreshCcw size={14} /> {retryingJobId === job.id ? "Retrying..." : "Retry"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

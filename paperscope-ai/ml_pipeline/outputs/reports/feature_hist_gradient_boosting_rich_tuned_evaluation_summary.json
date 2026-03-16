@@ -41,6 +41,6 @@
   },
   "test_rows": 3495,
   "feature_columns_count": 40,
-  "metadata_path": "C:\\Users\\Admin\\Documents\\Paperscope-AI---Spotting-Risks-Before-Replication\\paperscope-ai\\ml_pipeline\\outputs\\models\\feature_hist_gradient_boosting_rich_tuned_v1\\metadata.json",
-  "model_dir": "C:\\Users\\Admin\\Documents\\Paperscope-AI---Spotting-Risks-Before-Replication\\paperscope-ai\\ml_pipeline\\outputs\\models\\feature_hist_gradient_boosting_rich_tuned_v1"
+  "metadata_path": "C:\\Users\\Admin\\Downloads\\PaperScope AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\feature_hist_gradient_boosting_rich_tuned_v1\\metadata.json",
+  "model_dir": "C:\\Users\\Admin\\Downloads\\PaperScope AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\feature_hist_gradient_boosting_rich_tuned_v1"
 }

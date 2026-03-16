@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { Search, AlertTriangle } from "lucide-react";
+import { getAdminErrorLogs } from "../../api/analysis.api.js";
 import "./Dashboard.css";
 import "./AdminDashboard.css";
 import "./ErrorLogs.css";
@@ -10,6 +11,7 @@ export default function ErrorLogs() {
   const { user, logout, initializing } = useAuth();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
+  const [logs, setLogs] = useState([]);
 
   useEffect(() => {
     if (!initializing) {
@@ -20,6 +22,12 @@ export default function ErrorLogs() {
       }
     }
   }, [user, initializing, navigate]);
+
+  useEffect(() => {
+    if (!initializing && user && (user.is_superuser || user.role === "ADMIN")) {
+      loadLogs();
+    }
+  }, [initializing, user]);
 
   if (initializing) {
     return (
@@ -37,42 +45,22 @@ export default function ErrorLogs() {
     navigate("/login");
   };
 
-  const logs = [
-    {
-      id: 1,
-      source: "pdf_extraction",
-      timestamp: "1/22/2025, 6:03:00 AM",
-      message:
-        "PDF extraction failed: corrupted file header at byte offset 1024. PyMuPDF raised fitz.FileDataError.",
-      user: "Alex Rivera",
-      paper: "Statistical Methods for Climate Model Validation",
-    },
-    {
-      id: 2,
-      source: "arxiv_api",
-      timestamp: "1/25/2025, 10:30:00 AM",
-      message: "arXiv API rate limit exceeded. Retry after 60s.",
-      user: "",
-      paper: "",
-    },
-    {
-      id: 3,
-      source: "text_preprocessing",
-      timestamp: "2/14/2025, 5:13:00 AM",
-      message:
-        "NLTK punkt tokenizer not found. Falling back to whitespace tokenization.",
-      user: "Mike Thompson",
-      paper: "Reinforcement Learning in Autonomous Navigation",
-    },
-    {
-      id: 4,
-      source: "model_loader",
-      timestamp: "2/15/2025, 3:00:00 AM",
-      message: "Model artifact cache miss for mv2. Reloading from disk.",
-      user: "",
-      paper: "",
-    },
-  ];
+  async function loadLogs() {
+    try {
+      const data = await getAdminErrorLogs();
+      const normalized = (data?.logs || []).map((log) => ({
+        id: log.error_id,
+        source: log.module_name || "unknown",
+        timestamp: log.timestamp ? new Date(log.timestamp).toLocaleString() : "—",
+        message: log.message || "",
+        user: log.user || "",
+        paper: log.paper || "",
+      }));
+      setLogs(normalized);
+    } catch (error) {
+      setLogs([]);
+    }
+  }
 
   const filteredLogs = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -88,7 +76,7 @@ export default function ErrorLogs() {
         log.paper.toLowerCase().includes(term)
       );
     });
-  }, [searchTerm]);
+  }, [searchTerm, logs]);
 
   return (
     <div className="ps-app">

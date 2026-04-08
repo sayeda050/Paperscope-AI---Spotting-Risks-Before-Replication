@@ -6,13 +6,11 @@ from datetime import datetime, timezone
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Source model directory from current training pipeline
-SRC_MODEL_DIR = BASE_DIR / "outputs" / "models" / "tfidf_lr_v1"
+SRC_MODEL_DIR = BASE_DIR / "outputs" / "models" / "tfidf_logreg_auto_v2"
 
-# Export destination inside backend
 BACKEND_DIR = BASE_DIR.parent / "backend"
 ML_ASSETS_DIR = BACKEND_DIR / "ml_assets"
-DEST_MODEL_DIR = ML_ASSETS_DIR / "models" / "tfidf_lr_v1"
+DEST_MODEL_DIR = ML_ASSETS_DIR / "models" / "tfidf_logreg_auto_v2"
 REGISTRY_PATH = ML_ASSETS_DIR / "registry.json"
 
 
@@ -29,20 +27,19 @@ def main():
         "label_encoder.joblib",
         "metadata.json",
         "train_report.json",
+        "feature_coefficients.csv",
     ]
 
     for fname in files_to_copy:
         src_file = SRC_MODEL_DIR / fname
         if not src_file.exists():
             raise FileNotFoundError(f"Missing source file: {src_file}")
-
-        dst_file = DEST_MODEL_DIR / fname
-        shutil.copy2(src_file, dst_file)
+        shutil.copy2(src_file, DEST_MODEL_DIR / fname)
 
     registry = {
-        "active_model": "tfidf_lr_v1",
+        "active_model": "tfidf_logreg_auto_v2",
         "updated_at": datetime.now(timezone.utc).isoformat(),
-        "available_models": ["tfidf_lr_v1"],
+        "available_models": ["tfidf_logreg_auto_v2"],
         "model_path": str(DEST_MODEL_DIR),
     }
 

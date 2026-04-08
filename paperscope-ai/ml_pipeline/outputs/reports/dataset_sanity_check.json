@@ -1,18 +1,21 @@
 {
-  "rows": 23312,
-  "columns": 33,
-  "review_text_nonempty": 23018,
-  "decision_text_nonempty": 18744,
+  "rows": 994,
+  "columns": 50,
+  "model_text_nonempty": 994,
+  "raw_text_nonempty": 994,
   "duplicate_paper_uid": 0,
   "label_counts": {
-    "LOW": 7771,
-    "HIGH": 7771,
-    "MEDIUM": 7770
+    "NO": 548,
+    "YES": 446
   },
   "constant_columns": [
-    "source"
+    "source",
+    "venue",
+    "year",
+    "pdf_downloaded"
   ],
-  "labeling_method_expected": "balanced_rank_qcut",
-  "label_score_mismatch_rows_current_method": 0,
-  "label_score_mismatch_rows_old_threshold_reference": 11036
+  "auto_score_min": 0.3653646223510057,
+  "auto_score_max": 0.5665241847418293,
+  "auto_score_mean": 0.4601587841794501,
+  "leakage_columns_present": []
 }

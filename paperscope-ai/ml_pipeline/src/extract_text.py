@@ -1,7 +1,10 @@
 import sys
 from pathlib import Path
+import json
+import argparse
+import re
 
-import fitz  # PyMuPDF
+import fitz
 import pdfplumber
 from tqdm import tqdm
 
@@ -14,9 +17,29 @@ from utils import read_jsonl, write_jsonl, clean_text, ensure_dir
 PIPELINE_DIR = SRC_DIR.parent
 IN_FILE = PIPELINE_DIR / "data" / "processed" / "linked_with_pdfs.jsonl"
 OUT_FILE = PIPELINE_DIR / "data" / "processed" / "extracted_text.jsonl"
+REPORT_FILE = PIPELINE_DIR / "outputs" / "reports" / "extraction_report.json"
 
 
-def extract_with_pymupdf(pdf_path: Path, max_pages=50):
+def normalize_pdf_text(text: str) -> str:
+    text = text or ""
+    text = text.replace("\x00", " ")
+    text = text.replace("\ufeff", " ")
+    text = text.replace("\r", "\n")
+    text = re.sub(r"([A-Za-z])-\n([A-Za-z])", r"\1\2", text)
+    text = re.sub(r"(?<=\w)\n(?=\w)", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if re.fullmatch(r"\d{1,4}", stripped):
+            continue
+        lines.append(stripped)
+    text = "\n".join(lines)
+    return clean_text(text)
+
+
+def extract_with_pymupdf(pdf_path: Path, max_pages: int = 50) -> str:
     text_parts = []
     doc = fitz.open(pdf_path)
     try:
@@ -31,7 +54,7 @@ def extract_with_pymupdf(pdf_path: Path, max_pages=50):
     return "\n".join(text_parts)
 
 
-def extract_with_pdfplumber(pdf_path: Path, max_pages=50):
+def extract_with_pdfplumber(pdf_path: Path, max_pages: int = 50) -> str:
     text_parts = []
     with pdfplumber.open(pdf_path) as pdf:
         for i, page in enumerate(pdf.pages):
@@ -43,23 +66,48 @@ def extract_with_pdfplumber(pdf_path: Path, max_pages=50):
     return "\n".join(text_parts)
 
 
-def build_model_text(title: str, abstract: str, raw_text: str):
+def build_model_text(title: str, abstract: str, keywords: str, raw_text: str) -> str:
     title = clean_text(title)
     abstract = clean_text(abstract)
-    raw_text = clean_text(raw_text)
-
-    # Keep the most useful text for CPU-friendly TF-IDF
-    raw_text = raw_text[:40000]
-    model_text = f"{title}. {abstract}. {raw_text}"
-    return clean_text(model_text)
+    keywords = clean_text(keywords)
+    raw_text = normalize_pdf_text(raw_text)[:60000]
+    return clean_text(". ".join([p for p in [title, abstract, keywords, raw_text] if p]))
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Extract and clean PDF text.")
+    parser.add_argument("--require-pdf-text", action="store_true")
+    parser.add_argument("--min-raw-chars", type=int, default=1500)
+    parser.add_argument("--max-pages", type=int, default=50)
+    args = parser.parse_args()
+
     ensure_dir(OUT_FILE.parent)
+    ensure_dir(REPORT_FILE.parent)
+
     rows = read_jsonl(IN_FILE)
+    if not rows:
+        raise FileNotFoundError(f"Input file not found or empty: {IN_FILE}. Run download_openreview_pdfs.py first.")
+
     extracted = []
+    duplicate_seen = set()
+    stats = {
+        "input_rows": len(rows),
+        "kept_rows": 0,
+        "dropped_missing_pdf": 0,
+        "dropped_short_raw_text": 0,
+        "duplicate_paper_uid_dropped": 0,
+        "pymupdf_success": 0,
+        "pdfplumber_fallback_success": 0,
+        "pdf_extract_failed": 0,
+    }
 
     for row in tqdm(rows, desc="Extracting PDF text"):
+        paper_uid = row.get("paper_uid", "")
+        if paper_uid in duplicate_seen:
+            stats["duplicate_paper_uid_dropped"] += 1
+            continue
+        duplicate_seen.add(paper_uid)
+
         pdf_path = row.get("pdf_path", "")
         raw_text = ""
 
@@ -67,43 +115,60 @@ def main():
             pdf_file = Path(pdf_path)
             if pdf_file.exists():
                 try:
-                    raw_text = extract_with_pymupdf(pdf_file)
+                    raw_text = extract_with_pymupdf(pdf_file, max_pages=args.max_pages)
+                    stats["pymupdf_success"] += 1
                 except Exception:
                     try:
-                        raw_text = extract_with_pdfplumber(pdf_file)
+                        raw_text = extract_with_pdfplumber(pdf_file, max_pages=args.max_pages)
+                        stats["pdfplumber_fallback_success"] += 1
                     except Exception:
                         raw_text = ""
+                        stats["pdf_extract_failed"] += 1
+
+        raw_text = normalize_pdf_text(raw_text)
+
+        if args.require_pdf_text:
+            if not pdf_path:
+                stats["dropped_missing_pdf"] += 1
+                continue
+            if len(raw_text) < args.min_raw_chars:
+                stats["dropped_short_raw_text"] += 1
+                continue
 
         title = row.get("title", "")
         abstract = row.get("abstract", "")
-        review_text = row.get("review_text", "")
-        decision_text = row.get("decision_text", "")
         keywords = row.get("keywords", "")
+        model_text = build_model_text(title, abstract, keywords, raw_text)
 
-        model_text = build_model_text(title, abstract, raw_text)
+        if not model_text:
+            continue
 
         extracted.append({
-            "paper_uid": row.get("paper_uid", ""),
+            "paper_uid": paper_uid,
             "source": row.get("source", ""),
             "venue": row.get("venue", ""),
             "year": row.get("year", ""),
             "openreview_id": row.get("openreview_id", ""),
             "forum_id": row.get("forum_id", ""),
-            "arxiv_id": row.get("arxiv_id", ""),
-            "title": title,
-            "abstract": abstract,
+            "title": clean_text(title),
+            "abstract": clean_text(abstract),
             "keywords": clean_text(keywords),
-            "review_text": clean_text(review_text),
-            "decision_text": clean_text(decision_text),
-            "review_count": row.get("review_count", 0),
+            "pdf_url": row.get("pdf_url", ""),
             "pdf_path": pdf_path,
             "pdf_downloaded": row.get("pdf_downloaded", False),
-            "raw_text": clean_text(raw_text),
+            "raw_text": raw_text,
             "model_text": model_text,
+            "raw_text_chars": len(raw_text),
+            "model_text_chars": len(model_text),
         })
 
     write_jsonl(OUT_FILE, extracted)
+    stats["kept_rows"] = len(extracted)
+    REPORT_FILE.write_text(json.dumps(stats, indent=2), encoding="utf-8")
+
     print(f"✅ Extracted text saved to: {OUT_FILE}")
+    print(f"✅ Extraction report saved to: {REPORT_FILE}")
+    print(f"✅ Kept rows: {len(extracted)}")
 
 
 if __name__ == "__main__":

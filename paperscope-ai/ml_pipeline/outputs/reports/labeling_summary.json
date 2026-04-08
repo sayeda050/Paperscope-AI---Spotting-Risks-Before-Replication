@@ -1,14 +1,13 @@
 {
-  "total_rows_before_length_filter": 23312,
-  "label_summary": {
-    "labeling_method": "balanced_rank_qcut",
-    "label_counts": {
-      "LOW": 7771,
-      "HIGH": 7771,
-      "MEDIUM": 7770
-    },
-    "unique_risk_scores": 73,
-    "min_risk_score": 37.5,
-    "max_risk_score": 100.0
-  }
+  "rows_labeled": 994,
+  "label_counts": {
+    "NO": 548,
+    "YES": 446
+  },
+  "cluster_centers": [
+    0.4373528390394701,
+    0.4881804387460623
+  ],
+  "labeling_method": "kmeans_2clusters_over_auto_score",
+  "output_csv": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\labeled_dataset.csv"
 }

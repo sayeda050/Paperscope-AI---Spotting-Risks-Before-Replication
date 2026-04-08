@@ -1,0 +1,10 @@
+{
+  "input_rows": 1000,
+  "kept_rows": 994,
+  "dropped_missing_pdf": 4,
+  "dropped_short_raw_text": 2,
+  "duplicate_paper_uid_dropped": 0,
+  "pymupdf_success": 996,
+  "pdfplumber_fallback_success": 0,
+  "pdf_extract_failed": 0
+}

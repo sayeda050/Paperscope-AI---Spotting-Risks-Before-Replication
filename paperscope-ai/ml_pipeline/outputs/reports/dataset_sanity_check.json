@@ -1,21 +1,23 @@
 {
-  "rows": 994,
-  "columns": 50,
-  "model_text_nonempty": 994,
-  "raw_text_nonempty": 994,
+  "rows": 461,
+  "columns": 33,
+  "model_text_nonempty": 461,
+  "raw_text_nonempty": 457,
   "duplicate_paper_uid": 0,
   "label_counts": {
-    "NO": 548,
-    "YES": 446
+    "YES": 255,
+    "NO": 206
   },
   "constant_columns": [
     "source",
     "venue",
-    "year",
-    "pdf_downloaded"
+    "year"
   ],
-  "auto_score_min": 0.3653646223510057,
-  "auto_score_max": 0.5665241847418293,
-  "auto_score_mean": 0.4601587841794501,
-  "leakage_columns_present": []
+  "auto_score_min": 0.0,
+  "auto_score_max": 1.0,
+  "auto_score_mean": 0.5956590425132795,
+  "leakage_columns_present": [
+    "review_text",
+    "decision_text"
+  ]
 }

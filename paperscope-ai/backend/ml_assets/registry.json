@@ -1,8 +1,14 @@
 {
   "active_model": "tfidf_logreg_auto_v2",
-  "updated_at": "2026-04-08T12:55:13.851701+00:00",
+  "updated_at": "2026-04-11T18:08:31.108817+00:00",
   "available_models": [
     "tfidf_logreg_auto_v2"
   ],
-  "model_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_auto_v2"
+  "model_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_auto_v2",
+  "activeModelId": "tfidf_logreg_auto_v2",
+  "models": [
+    {
+      "id": "tfidf_logreg_auto_v2"
+    }
+  ]
 }

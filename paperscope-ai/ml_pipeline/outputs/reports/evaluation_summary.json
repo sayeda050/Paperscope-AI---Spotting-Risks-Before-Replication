@@ -1,38 +1,38 @@
 {
-  "test_accuracy": 0.96,
+  "test_accuracy": 0.8285714285714286,
   "labels": [
     "NO",
     "YES"
   ],
   "classification_report": {
     "NO": {
-      "precision": 0.9529411764705882,
-      "recall": 0.9759036144578314,
-      "f1-score": 0.9642857142857143,
-      "support": 83.0
+      "precision": 0.88,
+      "recall": 0.7096774193548387,
+      "f1-score": 0.7857142857142857,
+      "support": 31.0
     },
     "YES": {
-      "precision": 0.9692307692307692,
-      "recall": 0.9402985074626866,
-      "f1-score": 0.9545454545454546,
-      "support": 67.0
+      "precision": 0.8,
+      "recall": 0.9230769230769231,
+      "f1-score": 0.8571428571428571,
+      "support": 39.0
     },
-    "accuracy": 0.96,
+    "accuracy": 0.8285714285714286,
     "macro avg": {
-      "precision": 0.9610859728506786,
-      "recall": 0.9581010609602589,
-      "f1-score": 0.9594155844155845,
-      "support": 150.0
+      "precision": 0.8400000000000001,
+      "recall": 0.8163771712158809,
+      "f1-score": 0.8214285714285714,
+      "support": 70.0
     },
     "weighted avg": {
-      "precision": 0.9602171945701359,
-      "recall": 0.96,
-      "f1-score": 0.959935064935065,
-      "support": 150.0
+      "precision": 0.8354285714285715,
+      "recall": 0.8285714285714286,
+      "f1-score": 0.8255102040816326,
+      "support": 70.0
     }
   },
-  "test_rows": 150,
-  "model_dir": "C:\\Users\\Admin\\Documents\\Paperscope-AI---Spotting-Risks-Before-Replication\\paperscope-ai\\ml_pipeline\\outputs\\models\\tfidf_logreg_auto_v2",
+  "test_rows": 70,
+  "model_dir": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\tfidf_logreg_auto_v2",
   "feature_engineering": "tfidf_bigrams_plus_content_keyword_flags_v1",
   "used_keyword_flags": true
 }

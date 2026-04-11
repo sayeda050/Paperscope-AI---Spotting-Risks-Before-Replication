@@ -1,12 +1,12 @@
 {
   "input_rows": 1000,
-  "kept_rows": 0,
-  "dropped_missing_pdf": 4,
-  "dropped_short_raw_text": 996,
+  "kept_rows": 1000,
+  "dropped_missing_pdf": 0,
+  "dropped_short_raw_text": 0,
   "duplicate_paper_uid_dropped": 0,
-  "pymupdf_success": 0,
+  "pymupdf_success": 996,
   "pdfplumber_fallback_success": 0,
   "pdf_extract_failed": 0,
-  "rows_with_review_text": 0,
-  "rows_with_decision_text": 0
+  "rows_with_review_text": 989,
+  "rows_with_decision_text": 757
 }

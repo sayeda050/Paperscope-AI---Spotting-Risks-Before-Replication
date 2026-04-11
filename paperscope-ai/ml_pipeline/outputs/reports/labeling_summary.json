@@ -1,13 +1,23 @@
 {
-  "rows_labeled": 994,
+  "input_rows": 999,
+  "rows_labeled": 461,
+  "dropped_ambiguous": 538,
+  "labeled_from_reviewer_text": 130,
+  "labeled_from_decision_text": 13,
+  "labeled_from_score_fallback": 318,
   "label_counts": {
-    "NO": 548,
-    "YES": 446
+    "YES": 255,
+    "NO": 206
   },
-  "cluster_centers": [
-    0.4373528390394701,
-    0.4881804387460623
-  ],
-  "labeling_method": "kmeans_2clusters_over_auto_score",
+  "label_source_counts": {
+    "score_fallback": 318,
+    "review_text": 130,
+    "decision_text": 13
+  },
+  "labeling_method": "repro_text_then_score_fallback",
+  "score_thresholds": {
+    "high": 0.7,
+    "low": 0.3
+  },
   "output_csv": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\labeled_dataset.csv"
 }

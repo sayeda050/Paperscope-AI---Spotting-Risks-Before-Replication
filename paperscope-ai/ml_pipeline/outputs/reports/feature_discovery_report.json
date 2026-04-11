@@ -1,0 +1,8 @@
+{
+  "input_rows_after_filtering": 994,
+  "tfidf_vocab_size": 80000,
+  "n_components": 32,
+  "explained_variance_ratio_sum": 0.13321943269007905,
+  "feature_matrix_csv": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\discovered_feature_matrix.csv",
+  "feature_terms_json": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\discovered_feature_terms.json"
+}

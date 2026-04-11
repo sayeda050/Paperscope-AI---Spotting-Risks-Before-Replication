@@ -66,3 +66,18 @@ backend/ml_assets/models/
 !ml_pipeline/outputs/reports/*.txt
 !ml_pipeline/outputs/reports/*.json
 !ml_pipeline/outputs/reports/*.csv
+
+# Large downloaded PDFs
+ml_pipeline/data/pdfs/
+
+# Windows shortcut
+*.lnk
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Backup files
+*.backup.py
+*.before_finance_fix.py
+

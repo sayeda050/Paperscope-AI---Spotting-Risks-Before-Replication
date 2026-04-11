@@ -1,8 +1,13 @@
+from __future__ import annotations
+
 import json
+import math
 import re
 from pathlib import Path
+from datetime import datetime, timezone
 
 import joblib
+import numpy as np
 import pandas as pd
 
 
@@ -112,78 +117,19 @@ NEGATIVE_PATTERNS = {
 def safe_read_json(path: Path, default):
     if not path.exists():
         return default
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default
+
+
+def write_json(path: Path, payload):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def clear_model_cache():
     _MODEL_CACHE.clear()
-
-
-def load_registry():
-    return safe_read_json(REGISTRY_PATH, {"activeModelId": None, "models": []})
-
-
-def save_registry(registry):
-    REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REGISTRY_PATH.write_text(json.dumps(registry, indent=2), encoding="utf-8")
-
-
-def _enrich_model_entry(model):
-    enriched = dict(model)
-    artifact_dir = MODELS_DIR / enriched["artifactSubdir"]
-    enriched["artifactExists"] = artifact_dir.exists()
-    if not enriched["artifactExists"]:
-        enriched["status"] = "missing_artifacts"
-    return enriched
-
-
-def list_models():
-    registry = load_registry()
-    models = [_enrich_model_entry(m) for m in registry.get("models", [])]
-    models.sort(key=lambda x: (not x.get("active", False), x.get("name", "")))
-    return models
-
-
-def refresh_registry_from_disk():
-    clear_model_cache()
-    return list_models()
-
-
-def get_model_by_id(model_id):
-    for model in list_models():
-        if model.get("id") == model_id:
-            return model
-    return None
-
-
-def get_active_model():
-    registry = load_registry()
-    active_id = registry.get("activeModelId")
-    if not active_id:
-        return None
-    return get_model_by_id(active_id)
-
-
-def set_active_model(model_id: str):
-    registry = load_registry()
-    models = registry.get("models", [])
-
-    found = False
-    for model in models:
-        is_active = model.get("id") == model_id
-        model["active"] = is_active
-        if is_active:
-            found = True
-            artifact_dir = MODELS_DIR / model["artifactSubdir"]
-            if not artifact_dir.exists():
-                raise FileNotFoundError(f"Artifact folder missing for model: {model_id}")
-
-    if not found:
-        raise ValueError(f"Model id not found: {model_id}")
-
-    registry["activeModelId"] = model_id
-    save_registry(registry)
-    clear_model_cache()
 
 
 def clean_text(text):
@@ -285,12 +231,10 @@ def build_rich_feature_frame(payload, feature_columns):
     row["model_text_len"] = safe_text_len(model_text)
     row["review_text_len"] = safe_text_len(review_text)
     row["decision_text_len"] = safe_text_len(decision_text)
-
     row["review_count"] = review_count
 
     row["num_positive_indicators"] = float(sum(row.get(k, 0.0) for k in POSITIVE_FEATURES))
     row["num_negative_indicators"] = float(sum(row.get(k, 0.0) for k in NEGATIVE_FEATURES))
-
     row["positive_minus_negative"] = row["num_positive_indicators"] - row["num_negative_indicators"]
     row["positive_plus_negative"] = row["num_positive_indicators"] + row["num_negative_indicators"]
     row["positive_to_total_ratio"] = (
@@ -335,13 +279,6 @@ def build_rich_feature_frame(payload, feature_columns):
 
 
 def _patch_classifier_for_runtime_compatibility(classifier):
-    """
-    Fixes missing attributes on pickled sklearn estimators when they are loaded
-    under a slightly different sklearn runtime.
-
-    This is critical for multi-model switching because different exported models
-    may have been trained/saved under slightly different sklearn behavior.
-    """
     class_name = classifier.__class__.__name__
 
     if class_name == "LogisticRegression":
@@ -352,15 +289,199 @@ def _patch_classifier_for_runtime_compatibility(classifier):
         if not hasattr(classifier, "l1_ratio"):
             classifier.l1_ratio = None
 
-    elif class_name == "LinearSVC":
-        if not hasattr(classifier, "break_ties"):
-            classifier.break_ties = False
-
-    elif class_name == "SVC":
+    elif class_name in {"LinearSVC", "SVC"}:
         if not hasattr(classifier, "break_ties"):
             classifier.break_ties = False
 
     return classifier
+
+
+def _guess_pipeline_type(model_dir: Path, metadata: dict) -> str:
+    if (model_dir / "vectorizer.joblib").exists():
+        return "text_input_v1"
+
+    input_type = str(metadata.get("input_type", "")).lower()
+    if "rich" in input_type:
+        return "feature_rich_v1"
+
+    return "feature_base_v1"
+
+
+def _extract_metric(train_report: dict, key_path):
+    cur = train_report
+    for key in key_path:
+        if not isinstance(cur, dict) or key not in cur:
+            return None
+        cur = cur[key]
+    try:
+        return float(cur)
+    except Exception:
+        return None
+
+
+def _extract_metrics(model_dir: Path):
+    train_report = safe_read_json(model_dir / "train_report.json", {})
+
+    test_acc = (
+        _extract_metric(train_report, ["test", "accuracy"])
+        or _extract_metric(train_report, ["test_final_model", "accuracy"])
+        or _extract_metric(train_report, ["validation", "accuracy"])
+        or _extract_metric(train_report, ["validation_selected_model", "accuracy"])
+    )
+
+    test_f1 = (
+        _extract_metric(train_report, ["test", "macro_f1"])
+        or _extract_metric(train_report, ["test_final_model", "macro_f1"])
+        or _extract_metric(train_report, ["validation", "macro_f1"])
+        or _extract_metric(train_report, ["validation_selected_model", "macro_f1"])
+    )
+
+    return {
+        "testAccuracy": test_acc,
+        "macroF1": test_f1,
+    }
+
+
+def _format_created_at(model_dir: Path, metadata: dict):
+    value = metadata.get("created_at")
+    if value:
+        return str(value)
+
+    try:
+        ts = model_dir.stat().st_mtime
+        return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return ""
+
+
+def _discover_models_from_disk():
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+    models = []
+    for child in MODELS_DIR.iterdir():
+        if not child.is_dir():
+            continue
+
+        metadata = safe_read_json(child / "metadata.json", {})
+        pipeline_type = _guess_pipeline_type(child, metadata)
+
+        model_name = metadata.get("model_name") or child.name
+        classifier_type = metadata.get("classifier_type", "")
+        vectorizer_type = metadata.get("vectorizer_type", "")
+        model_type = " + ".join([x for x in [vectorizer_type, classifier_type] if x]) or child.name
+
+        status = "ready"
+        if not (child / "classifier.joblib").exists() or not (child / "label_encoder.joblib").exists():
+            status = "missing_artifacts"
+
+        if pipeline_type == "text_input_v1" and not (child / "vectorizer.joblib").exists():
+            status = "missing_artifacts"
+
+        models.append(
+            {
+                "id": child.name,
+                "name": model_name,
+                "artifactSubdir": child.name,
+                "modelType": model_type,
+                "pipelineType": pipeline_type,
+                "createdAt": _format_created_at(child, metadata),
+                "metrics": _extract_metrics(child),
+                "status": status,
+                "active": False,
+            }
+        )
+
+    models.sort(key=lambda x: x["name"].lower())
+    return models
+
+
+def load_registry():
+    registry = safe_read_json(REGISTRY_PATH, {})
+    active_id = registry.get("activeModelId") or registry.get("active_model")
+    return {
+        "activeModelId": active_id,
+        "raw": registry,
+    }
+
+
+def save_registry(active_id: str, models: list[dict]):
+    active_model_path = ""
+    if active_id:
+        active_model_path = str(MODELS_DIR / active_id)
+
+    payload = {
+        # backward-compatible simple keys
+        "active_model": active_id,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "available_models": [m["id"] for m in models],
+        "model_path": active_model_path,
+        # richer keys for admin model UI/service
+        "activeModelId": active_id,
+        "models": models,
+    }
+    write_json(REGISTRY_PATH, payload)
+
+
+def list_models():
+    registry = load_registry()
+    active_id = registry["activeModelId"]
+
+    models = _discover_models_from_disk()
+    for model in models:
+        model["active"] = model["id"] == active_id
+
+    if not active_id and models:
+        models[0]["active"] = True
+        active_id = models[0]["id"]
+        save_registry(active_id, models)
+
+    models.sort(key=lambda x: (not x.get("active", False), x.get("name", "").lower()))
+    return models
+
+
+def refresh_registry_from_disk():
+    clear_model_cache()
+    models = list_models()
+    active = next((m["id"] for m in models if m.get("active")), None)
+    save_registry(active, models)
+    return models
+
+
+def get_model_by_id(model_id):
+    for model in list_models():
+        if model.get("id") == model_id:
+            return model
+    return None
+
+
+def get_active_model():
+    models = list_models()
+    for model in models:
+        if model.get("active"):
+            return model
+    return None
+
+
+def set_active_model(model_id: str):
+    models = list_models()
+    found = False
+
+    for model in models:
+        is_active = model["id"] == model_id
+        model["active"] = is_active
+        if is_active:
+            found = True
+            model_dir = MODELS_DIR / model["artifactSubdir"]
+            if not model_dir.exists():
+                raise FileNotFoundError(f"Artifact folder missing for model: {model_id}")
+            if model.get("status") != "ready":
+                raise FileNotFoundError(f"Artifacts are incomplete for model: {model_id}")
+
+    if not found:
+        raise ValueError(f"Model id not found: {model_id}")
+
+    save_registry(model_id, models)
+    clear_model_cache()
 
 
 def _load_model_bundle(model_spec):
@@ -397,6 +518,20 @@ def _load_model_bundle(model_spec):
     return bundle
 
 
+def _sigmoid(x):
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+def _softmax(arr):
+    arr = np.asarray(arr, dtype=float)
+    arr = arr - np.max(arr)
+    exp = np.exp(arr)
+    denom = np.sum(exp)
+    if denom == 0:
+        return np.ones_like(arr) / len(arr)
+    return exp / denom
+
+
 def _safe_predict_proba(classifier, X, label_encoder):
     try:
         if hasattr(classifier, "predict_proba"):
@@ -404,9 +539,28 @@ def _safe_predict_proba(classifier, X, label_encoder):
             class_names = label_encoder.classes_.tolist()
             return {class_names[i]: float(proba[i]) for i in range(len(class_names))}
     except Exception:
-        # Some switched models may still not support reliable proba under current runtime.
-        # In that case, keep prediction working and return empty probabilities.
-        return {}
+        pass
+
+    try:
+        if hasattr(classifier, "decision_function"):
+            scores = classifier.decision_function(X)
+            class_names = label_encoder.classes_.tolist()
+
+            if np.ndim(scores) == 1:
+                pos = float(_sigmoid(scores[0]))
+                neg = 1.0 - pos
+                if len(class_names) == 2:
+                    return {
+                        class_names[0]: neg,
+                        class_names[1]: pos,
+                    }
+
+            scores = np.asarray(scores[0], dtype=float)
+            probs = _softmax(scores)
+            return {class_names[i]: float(probs[i]) for i in range(len(class_names))}
+    except Exception:
+        pass
+
     return {}
 
 

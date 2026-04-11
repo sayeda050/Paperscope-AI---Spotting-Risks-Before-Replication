@@ -1,0 +1,9 @@
+{
+  "rows_scored": 994,
+  "feature_count": 32,
+  "score_min": 0.36536462235100575,
+  "score_max": 0.5665241847418293,
+  "score_mean": 0.46015878417945016,
+  "weights_csv": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\feature_weights.csv",
+  "scored_csv": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\auto_scored_papers.csv"
+}

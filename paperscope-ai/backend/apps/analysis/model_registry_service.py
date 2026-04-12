@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 import re
 from pathlib import Path
 from datetime import datetime, timezone
@@ -9,6 +8,7 @@ from datetime import datetime, timezone
 import joblib
 import numpy as np
 import pandas as pd
+import scipy.sparse as sp
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -113,6 +113,137 @@ NEGATIVE_PATTERNS = {
     ],
 }
 
+# Must match the corrected train_tfidf_logreg.py keyword flags exactly.
+TEXT_KEYWORD_FLAG_PATTERNS = {
+    "kw_code_link": re.compile(
+        r"github\.com/|gitlab\.com/|code\s+available|we\s+release\s+(?:the\s+)?code|open[- ]?source",
+        re.I,
+    ),
+    "kw_data_link": re.compile(
+        r"dataset\s+available|we\s+release\s+(?:the\s+)?data|huggingface\.co/|zenodo\.org/",
+        re.I,
+    ),
+    "kw_hyperparams": re.compile(
+        r"learning\s+rate|batch\s+size|epochs?|weight\s+decay|dropout|hyperparameter",
+        re.I,
+    ),
+    "kw_seed": re.compile(
+        r"random\s+seed|seed\s*=\s*\d+|seeded",
+        re.I,
+    ),
+    "kw_uncertainty": re.compile(
+        r"standard\s+deviation|confidence\s+interval|error\s+bar|±|\u00b1|p[- ]value",
+        re.I,
+    ),
+    "kw_compute": re.compile(
+        r"\bgpu\b|v100|a100|cuda|training\s+time|compute\s+(?:budget|hours?)",
+        re.I,
+    ),
+    "kw_ablation": re.compile(
+        r"ablation\s+stud(?:y|ies)|we\s+ablate",
+        re.I,
+    ),
+    "kw_baselines": re.compile(
+        r"baseline|compared\s+(?:with|to|against)|state[- ]of[- ]the[- ]art|sota",
+        re.I,
+    ),
+    "kw_limitations": re.compile(
+        r"limitations?|threats\s+to\s+validity|future\s+work|bias",
+        re.I,
+    ),
+    "kw_stat_tests": re.compile(
+        r"wilcoxon|t-test|anova|bootstrap|significance|confidence\s+interval",
+        re.I,
+    ),
+}
+
+ML_RE = re.compile(
+    r"\b(machine learning|deep learning|neural network|transformer|classifier|regression|feature selection|genetic algorithm|optimization)\b",
+    re.I,
+)
+LLM_RE = re.compile(
+    r"\b(llm|large language model|large language models|gpt-4|gpt-3\.5|claude|llama|gemini|mistral)\b",
+    re.I,
+)
+HDL_RE = re.compile(
+    r"\b(verilog|rtl|hdl|hardware|synthesis|testbench|compiler|simulator|simulation toolchain)\b",
+    re.I,
+)
+BIOMED_RE = re.compile(
+    r"\b(omics|multi-omic|multi-omics|gene|genomic|transcriptomic|mirna|mrna|biomarker|cancer|patient|cohort|survival analysis|clinical)\b",
+    re.I,
+)
+FINANCE_RE = re.compile(
+    r"\b(option pricing|black[- ]scholes|heston|garch|jump diffusion|merton|strike price|implied volatility|financial market|call option|put option)\b",
+    re.I,
+)
+LIVE_DATA_RE = re.compile(
+    r"\b(live market data|fetched at the time of execution|obtained .* at the time of execution|live data)\b",
+    re.I,
+)
+THEOREM_RE = re.compile(r"\b(theorem|lemma|corollary|proposition|claim|proof)\b", re.I)
+ALGORITHM_RE = re.compile(r"\balgorithm\s+\d+\b", re.I)
+TABLE_RE = re.compile(r"\btable\s+[ivxlcdm0-9]+\b", re.I)
+EQUATION_ID_RE = re.compile(r"\(\d+\)")
+AVAILABILITY_SECTION_RE = re.compile(
+    r"\b(data and source code availability|data availability|code availability|availability of data and materials|software availability)\b",
+    re.I,
+)
+PUBLIC_DATA_RE = re.compile(
+    r"\b(tcga|geo|sra|dbgap|uk biobank|seer|physionet|mimic|kaggle|uci|openml|yahoo finance|public dataset|public repository|public repositories)\b",
+    re.I,
+)
+ARTIFACT_PACKAGE_RE = re.compile(
+    r"\b(docker|requirements\.txt|conda|environment\.yml|replication package|artifact package|supplementary artifact|supplementary material)\b",
+    re.I,
+)
+EXECUTION_RE = re.compile(
+    r"\b(readme|installation|install(ation)? instructions|how to run|run the code|command line|cli|scripts are available|reproducible workflow|implementation available)\b",
+    re.I,
+)
+
+DEFAULT_SCORE_FEATURE_COLUMNS = [
+    "prob_yes",
+    "prob_no",
+    "top_class_probability",
+    "prediction_is_yes",
+    "prediction_is_no",
+    "has_code_link",
+    "has_data_link",
+    "has_hyperparams",
+    "has_seed",
+    "has_env_details",
+    "has_metrics",
+    "has_baselines",
+    "has_ablation",
+    "has_limitations",
+    "has_statistical_tests",
+    "title_len",
+    "abstract_len",
+    "model_text_len",
+    "model_text_len_k",
+    "num_positive_indicators",
+    "positive_per_1000_model_chars",
+    "has_code_and_data",
+    "has_hyperparams_and_seed",
+    "baselines_and_ablation",
+    "metrics_and_stats",
+    "has_availability_section",
+    "has_public_data",
+    "has_artifact_package",
+    "has_execution_instructions",
+    "has_live_runtime_data",
+    "equation_count",
+    "algorithm_count",
+    "table_count",
+    "theorem_count",
+    "is_ml",
+    "is_llm",
+    "is_hdl",
+    "is_biomed",
+    "is_finance",
+]
+
 
 def safe_read_json(path: Path, default):
     if not path.exists():
@@ -160,11 +291,34 @@ def build_text_input(payload, metadata):
     decision_text = clean_text(payload.get("decision_text", ""))
 
     input_hint = str(metadata.get("input_text", "")).lower()
-
     if "review_text" in input_hint or "decision_text" in input_hint:
         return clean_text(f"{base_text} [REVIEW] {review_text} [DECISION] {decision_text}")
 
     return base_text
+
+
+def _build_text_keyword_flags(texts: list[str]) -> np.ndarray:
+    n = len(texts)
+    k = len(TEXT_KEYWORD_FLAG_PATTERNS)
+    X = np.zeros((n, k), dtype=np.float32)
+    for j, pattern in enumerate(TEXT_KEYWORD_FLAG_PATTERNS.values()):
+        for i, text in enumerate(texts):
+            X[i, j] = 1.0 if pattern.search(text or "") else 0.0
+    return X
+
+
+def build_text_model_matrix(texts: list[str], vectorizer, metadata: dict):
+    X_tfidf = vectorizer.transform(texts)
+
+    feature_engineering = str(metadata.get("feature_engineering", "")).lower()
+    keyword_names = metadata.get("keyword_flag_names") or metadata.get("keyword_flags") or []
+
+    uses_keyword_flags = ("keyword" in feature_engineering) or bool(keyword_names)
+    if not uses_keyword_flags:
+        return X_tfidf
+
+    X_kw = _build_text_keyword_flags(texts)
+    return sp.hstack([X_tfidf, sp.csr_matrix(X_kw)], format="csr")
 
 
 def compute_base_feature_flags(payload):
@@ -174,13 +328,10 @@ def compute_base_feature_flags(payload):
     reviewer_signal_text = clean_text(f"{review_text} {decision_text}")
 
     feats = {}
-
     for key, patterns in POSITIVE_PATTERNS.items():
         feats[key] = has_any_pattern(model_text, patterns)
-
     for key, patterns in NEGATIVE_PATTERNS.items():
         feats[key] = has_any_pattern(reviewer_signal_text, patterns)
-
     return feats
 
 
@@ -193,10 +344,8 @@ def build_base_feature_frame(payload, feature_columns):
             df[col] = 0.0
 
     df = df[feature_columns].copy()
-
     for col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).astype(float)
-
     return df
 
 
@@ -271,10 +420,107 @@ def build_rich_feature_frame(payload, feature_columns):
             df[col] = 0.0
 
     df = df[feature_columns].copy()
-
     for col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).astype(float)
+    return df
 
+
+def _count_pattern_matches(text: str, pattern) -> float:
+    text = text or ""
+    return float(len(pattern.findall(text)))
+
+
+def _normalize_probabilities(probabilities: dict | None):
+    probabilities = probabilities or {}
+    upper_probs = {str(k).upper(): float(v) for k, v in probabilities.items()}
+
+    yes = upper_probs.get("YES")
+    no = upper_probs.get("NO")
+
+    if yes is None and no is not None:
+        yes = 1.0 - no
+    if no is None and yes is not None:
+        no = 1.0 - yes
+
+    if yes is None:
+        yes = 0.0
+    if no is None:
+        no = 0.0
+
+    top_class_probability = max(upper_probs.values()) if upper_probs else 0.0
+    return yes, no, float(top_class_probability)
+
+
+def build_score_feature_row(payload, prediction):
+    payload = payload or {}
+    prediction = prediction or {}
+
+    row = compute_base_feature_flags(payload)
+
+    title = clean_text(payload.get("title", ""))
+    abstract = clean_text(payload.get("abstract", ""))
+    model_text = build_default_model_text(payload)
+    combined = clean_text(f"{title} {abstract} {model_text}")
+
+    prob_yes, prob_no, top_class_probability = _normalize_probabilities(prediction.get("probabilities"))
+    pred_label = str(prediction.get("prediction", "")).strip().upper()
+
+    row["prob_yes"] = float(prob_yes)
+    row["prob_no"] = float(prob_no)
+    row["top_class_probability"] = float(top_class_probability)
+    row["prediction_is_yes"] = 1.0 if pred_label == "YES" else 0.0
+    row["prediction_is_no"] = 1.0 if pred_label == "NO" else 0.0
+
+    row["title_len"] = safe_text_len(title)
+    row["abstract_len"] = safe_text_len(abstract)
+    row["model_text_len"] = safe_text_len(model_text)
+    row["model_text_len_k"] = row["model_text_len"] / 1000.0 if row["model_text_len"] > 0 else 0.0
+
+    row["num_positive_indicators"] = float(sum(row.get(k, 0.0) for k in POSITIVE_FEATURES))
+    row["positive_per_1000_model_chars"] = (
+        1000.0 * row["num_positive_indicators"] / row["model_text_len"]
+        if row["model_text_len"] > 0 else 0.0
+    )
+
+    row["has_code_and_data"] = row.get("has_code_link", 0.0) * row.get("has_data_link", 0.0)
+    row["has_hyperparams_and_seed"] = row.get("has_hyperparams", 0.0) * row.get("has_seed", 0.0)
+    row["baselines_and_ablation"] = row.get("has_baselines", 0.0) * row.get("has_ablation", 0.0)
+    row["metrics_and_stats"] = row.get("has_metrics", 0.0) * row.get("has_statistical_tests", 0.0)
+
+    row["has_availability_section"] = 1.0 if AVAILABILITY_SECTION_RE.search(combined) else 0.0
+    row["has_public_data"] = 1.0 if PUBLIC_DATA_RE.search(combined) else 0.0
+    row["has_artifact_package"] = 1.0 if ARTIFACT_PACKAGE_RE.search(combined) else 0.0
+    row["has_execution_instructions"] = 1.0 if EXECUTION_RE.search(combined) else 0.0
+    row["has_live_runtime_data"] = 1.0 if LIVE_DATA_RE.search(combined) else 0.0
+
+    row["equation_count"] = _count_pattern_matches(combined, EQUATION_ID_RE)
+    row["algorithm_count"] = _count_pattern_matches(combined, ALGORITHM_RE)
+    row["table_count"] = _count_pattern_matches(combined, TABLE_RE)
+    row["theorem_count"] = _count_pattern_matches(combined, THEOREM_RE)
+
+    row["is_ml"] = 1.0 if ML_RE.search(combined) else 0.0
+    row["is_llm"] = 1.0 if LLM_RE.search(combined) else 0.0
+    row["is_hdl"] = 1.0 if HDL_RE.search(combined) else 0.0
+    row["is_biomed"] = 1.0 if BIOMED_RE.search(combined) else 0.0
+    row["is_finance"] = 1.0 if FINANCE_RE.search(combined) else 0.0
+
+    return row
+
+
+def build_score_feature_frame(payload, prediction, feature_columns=None):
+    if not feature_columns:
+        feature_columns = DEFAULT_SCORE_FEATURE_COLUMNS
+
+    row = build_score_feature_row(payload, prediction)
+    df = pd.DataFrame([row])
+
+    for col in feature_columns:
+        if col not in df.columns:
+            df[col] = 0.0
+
+    df = df[list(feature_columns)].copy()
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).astype(float)
     return df
 
 
@@ -325,6 +571,7 @@ def _extract_metrics(model_dir: Path):
     test_acc = (
         _extract_metric(train_report, ["test", "accuracy"])
         or _extract_metric(train_report, ["test_final_model", "accuracy"])
+        or _extract_metric(train_report, ["best_validation_selection", "val_accuracy"])
         or _extract_metric(train_report, ["validation", "accuracy"])
         or _extract_metric(train_report, ["validation_selected_model", "accuracy"])
     )
@@ -332,6 +579,7 @@ def _extract_metrics(model_dir: Path):
     test_f1 = (
         _extract_metric(train_report, ["test", "macro_f1"])
         or _extract_metric(train_report, ["test_final_model", "macro_f1"])
+        or _extract_metric(train_report, ["best_validation_selection", "val_macro_f1"])
         or _extract_metric(train_report, ["validation", "macro_f1"])
         or _extract_metric(train_report, ["validation_selected_model", "macro_f1"])
     )
@@ -405,17 +653,13 @@ def load_registry():
 
 
 def save_registry(active_id: str, models: list[dict]):
-    active_model_path = ""
-    if active_id:
-        active_model_path = str(MODELS_DIR / active_id)
+    active_model_path = str(MODELS_DIR / active_id) if active_id else ""
 
     payload = {
-        # backward-compatible simple keys
         "active_model": active_id,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "available_models": [m["id"] for m in models],
         "model_path": active_model_path,
-        # richer keys for admin model UI/service
         "activeModelId": active_id,
         "models": models,
     }
@@ -504,6 +748,8 @@ def _load_model_bundle(model_spec):
         "classifier": classifier,
         "label_encoder": joblib.load(model_dir / "label_encoder.joblib"),
         "metadata": metadata,
+        "score_calibrator": None,
+        "score_feature_columns": DEFAULT_SCORE_FEATURE_COLUMNS,
     }
 
     if pipeline_type == "text_input_v1":
@@ -513,6 +759,13 @@ def _load_model_bundle(model_spec):
         if not feature_columns and pipeline_type == "feature_base_v1":
             feature_columns = BASE_FEATURE_COLUMNS
         bundle["feature_columns"] = feature_columns
+
+    score_calibrator_path = model_dir / "score_calibrator.joblib"
+    if score_calibrator_path.exists():
+        bundle["score_calibrator"] = joblib.load(score_calibrator_path)
+        feature_columns = safe_read_json(model_dir / "score_feature_columns.json", [])
+        if feature_columns:
+            bundle["score_feature_columns"] = feature_columns
 
     _MODEL_CACHE[model_id] = bundle
     return bundle
@@ -564,6 +817,56 @@ def _safe_predict_proba(classifier, X, label_encoder):
     return {}
 
 
+def _predict_score_from_bundle(bundle, payload, prediction):
+    calibrator = bundle.get("score_calibrator")
+    if calibrator is None:
+        return {
+            "used_trained_calibrator": False,
+            "score": None,
+            "label": None,
+        }
+
+    feature_columns = bundle.get("score_feature_columns") or DEFAULT_SCORE_FEATURE_COLUMNS
+    X_score = build_score_feature_frame(payload, prediction, feature_columns)
+
+    raw_score = calibrator.predict(X_score)[0]
+    score = float(np.clip(raw_score, 0.0, 100.0))
+
+    if score < 35.0:
+        label = "Low"
+    elif score < 65.0:
+        label = "Med"
+    else:
+        label = "High"
+
+    return {
+        "used_trained_calibrator": True,
+        "score": round(score, 2),
+        "label": label,
+    }
+
+
+def predict_score_with_active_model(payload, prediction=None):
+    model_spec = get_active_model()
+    if not model_spec:
+        raise RuntimeError("No active model is configured.")
+
+    bundle = _load_model_bundle(model_spec)
+
+    if prediction is None:
+        prediction = predict_with_active_model(payload)
+
+    score_result = _predict_score_from_bundle(bundle, payload, prediction)
+    score_result["model"] = {
+        "id": model_spec["id"],
+        "name": model_spec["name"],
+        "modelType": model_spec["modelType"],
+        "pipelineType": model_spec["pipelineType"],
+        "active": True,
+    }
+    return score_result
+
+
 def predict_with_active_model(payload):
     model_spec = get_active_model()
     if not model_spec:
@@ -575,14 +878,11 @@ def predict_with_active_model(payload):
 
     if bundle["pipelineType"] == "text_input_v1":
         text_input = build_text_input(payload, bundle["metadata"])
-        X = bundle["vectorizer"].transform([text_input])
-
+        X = build_text_model_matrix([text_input], bundle["vectorizer"], bundle["metadata"])
     elif bundle["pipelineType"] == "feature_base_v1":
         X = build_base_feature_frame(payload, bundle["feature_columns"])
-
     elif bundle["pipelineType"] == "feature_rich_v1":
         X = build_rich_feature_frame(payload, bundle["feature_columns"])
-
     else:
         raise ValueError(f"Unsupported pipelineType: {bundle['pipelineType']}")
 

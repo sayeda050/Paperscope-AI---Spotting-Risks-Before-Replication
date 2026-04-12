@@ -35,8 +35,7 @@ def normalize_pdf_text(text: str) -> str:
         if re.fullmatch(r"\d{1,4}", stripped):
             continue
         lines.append(stripped)
-    text = "\n".join(lines)
-    return clean_text(text)
+    return clean_text("\n".join(lines))
 
 
 def extract_with_pymupdf(pdf_path: Path, max_pages: int = 50) -> str:
@@ -67,11 +66,21 @@ def extract_with_pdfplumber(pdf_path: Path, max_pages: int = 50) -> str:
 
 
 def build_model_text(title: str, abstract: str, keywords: str, raw_text: str) -> str:
+    """
+    Build the text used by the text classifier.
+
+    Important: review_text and decision_text are kept in the output JSONL for
+    downstream weak labeling and analysis, but are intentionally NOT included in
+    model_text. If labels are partly derived from review/decision text, putting
+    them inside model_text creates target leakage and inflates validation/test
+    performance unrealistically.
+    """
     title = clean_text(title)
     abstract = clean_text(abstract)
     keywords = clean_text(keywords)
     raw_text = normalize_pdf_text(raw_text)[:60000]
-    return clean_text(". ".join([p for p in [title, abstract, keywords, raw_text] if p]))
+    parts = [p for p in [title, abstract, keywords, raw_text] if p]
+    return clean_text(". ".join(parts))
 
 
 def main():
@@ -86,7 +95,9 @@ def main():
 
     rows = read_jsonl(IN_FILE)
     if not rows:
-        raise FileNotFoundError(f"Input file not found or empty: {IN_FILE}. Run download_openreview_pdfs.py first.")
+        raise FileNotFoundError(
+            f"Input file not found or empty: {IN_FILE}. Run download_openreview_pdfs.py first."
+        )
 
     extracted = []
     duplicate_seen = set()
@@ -99,6 +110,8 @@ def main():
         "pymupdf_success": 0,
         "pdfplumber_fallback_success": 0,
         "pdf_extract_failed": 0,
+        "rows_with_review_text": 0,
+        "rows_with_decision_text": 0,
     }
 
     for row in tqdm(rows, desc="Extracting PDF text"):
@@ -138,29 +151,42 @@ def main():
         title = row.get("title", "")
         abstract = row.get("abstract", "")
         keywords = row.get("keywords", "")
-        model_text = build_model_text(title, abstract, keywords, raw_text)
+        review_text = clean_text(row.get("review_text", "") or "")
+        decision_text = clean_text(row.get("decision_text", "") or "")
 
+        if review_text:
+            stats["rows_with_review_text"] += 1
+        if decision_text:
+            stats["rows_with_decision_text"] += 1
+
+        model_text = build_model_text(title, abstract, keywords, raw_text)
         if not model_text:
             continue
 
-        extracted.append({
-            "paper_uid": paper_uid,
-            "source": row.get("source", ""),
-            "venue": row.get("venue", ""),
-            "year": row.get("year", ""),
-            "openreview_id": row.get("openreview_id", ""),
-            "forum_id": row.get("forum_id", ""),
-            "title": clean_text(title),
-            "abstract": clean_text(abstract),
-            "keywords": clean_text(keywords),
-            "pdf_url": row.get("pdf_url", ""),
-            "pdf_path": pdf_path,
-            "pdf_downloaded": row.get("pdf_downloaded", False),
-            "raw_text": raw_text,
-            "model_text": model_text,
-            "raw_text_chars": len(raw_text),
-            "model_text_chars": len(model_text),
-        })
+        extracted.append(
+            {
+                "paper_uid": paper_uid,
+                "source": row.get("source", ""),
+                "venue": row.get("venue", ""),
+                "year": row.get("year", ""),
+                "openreview_id": row.get("openreview_id", ""),
+                "forum_id": row.get("forum_id", ""),
+                "title": clean_text(title),
+                "abstract": clean_text(abstract),
+                "keywords": clean_text(keywords),
+                "pdf_url": row.get("pdf_url", ""),
+                "pdf_path": pdf_path,
+                "pdf_downloaded": row.get("pdf_downloaded", False),
+                "raw_text": raw_text,
+                "review_text": review_text,
+                "decision_text": decision_text,
+                "model_text": model_text,
+                "raw_text_chars": len(raw_text),
+                "review_text_chars": len(review_text),
+                "decision_text_chars": len(decision_text),
+                "model_text_chars": len(model_text),
+            }
+        )
 
     write_jsonl(OUT_FILE, extracted)
     stats["kept_rows"] = len(extracted)
@@ -169,6 +195,8 @@ def main():
     print(f"✅ Extracted text saved to: {OUT_FILE}")
     print(f"✅ Extraction report saved to: {REPORT_FILE}")
     print(f"✅ Kept rows: {len(extracted)}")
+    print(f"✅ Rows with review_text: {stats['rows_with_review_text']}")
+    print(f"✅ Rows with decision_text: {stats['rows_with_decision_text']}")
 
 
 if __name__ == "__main__":

@@ -1,8 +1,11 @@
+import re
 from pathlib import Path
 import json
 
 import joblib
+import numpy as np
 import pandas as pd
+import scipy.sparse as sp
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report
@@ -23,6 +26,36 @@ LABEL_ENCODER_PATH = OUT_DIR / "label_encoder.joblib"
 METADATA_PATH = OUT_DIR / "metadata.json"
 TRAIN_REPORT_PATH = OUT_DIR / "train_report.json"
 COEFFICIENTS_PATH = OUT_DIR / "feature_coefficients.csv"
+
+# Only content-available flags. No accept/reject or review-only flags.
+KEYWORD_FLAGS = {
+    "kw_code_link": re.compile(r"github\.com/|gitlab\.com/|code\s+available|we\s+release\s+(?:the\s+)?code|open[- ]?source", re.I),
+    "kw_data_link": re.compile(r"dataset\s+available|we\s+release\s+(?:the\s+)?data|huggingface\.co/|zenodo\.org/", re.I),
+    "kw_hyperparams": re.compile(r"learning\s+rate|batch\s+size|epochs?|weight\s+decay|dropout|hyperparameter", re.I),
+    "kw_seed": re.compile(r"random\s+seed|seed\s*=\s*\d+|seeded", re.I),
+    "kw_uncertainty": re.compile(r"standard\s+deviation|confidence\s+interval|error\s+bar|±|\u00b1|p[- ]value", re.I),
+    "kw_compute": re.compile(r"\bgpu\b|v100|a100|cuda|training\s+time|compute\s+(?:budget|hours?)", re.I),
+    "kw_ablation": re.compile(r"ablation\s+stud(?:y|ies)|we\s+ablate", re.I),
+    "kw_baselines": re.compile(r"baseline|compared\s+(?:with|to|against)|state[- ]of[- ]the[- ]art|sota", re.I),
+    "kw_limitations": re.compile(r"limitations?|threats\s+to\s+validity|future\s+work|bias", re.I),
+    "kw_stat_tests": re.compile(r"wilcoxon|t-test|anova|bootstrap|significance|confidence\s+interval", re.I),
+}
+
+
+def extract_keyword_flags(texts: list[str]) -> np.ndarray:
+    n = len(texts)
+    k = len(KEYWORD_FLAGS)
+    X = np.zeros((n, k), dtype=np.float32)
+    for j, pattern in enumerate(KEYWORD_FLAGS.values()):
+        for i, text in enumerate(texts):
+            X[i, j] = 1.0 if pattern.search(text or "") else 0.0
+    return X
+
+
+def build_features(vectorizer: TfidfVectorizer, texts: list[str], fit: bool = False):
+    X_tfidf = vectorizer.fit_transform(texts) if fit else vectorizer.transform(texts)
+    X_kw = extract_keyword_flags(texts)
+    return sp.hstack([X_tfidf, sp.csr_matrix(X_kw)], format="csr")
 
 
 def make_json_safe(obj):
@@ -68,12 +101,7 @@ def evaluate_split(name, clf, X, y_true_labels, label_encoder):
     y_pred_labels = label_encoder.inverse_transform(y_pred)
 
     acc = accuracy_score(y_true_labels, y_pred_labels)
-    report = classification_report(
-        y_true_labels,
-        y_pred_labels,
-        output_dict=True,
-        zero_division=0,
-    )
+    report = classification_report(y_true_labels, y_pred_labels, output_dict=True, zero_division=0)
 
     print(f"\n{name} accuracy: {acc:.4f}")
     print(classification_report(y_true_labels, y_pred_labels, zero_division=0))
@@ -87,53 +115,29 @@ def evaluate_split(name, clf, X, y_true_labels, label_encoder):
 
 
 def build_coefficients_df(clf, vectorizer, class_names):
-    feature_names = vectorizer.get_feature_names_out()
+    feature_names = list(vectorizer.get_feature_names_out()) + list(KEYWORD_FLAGS.keys())
     coef = clf.coef_
 
     rows = []
-
-    # Binary logistic regression keeps only one coefficient row.
-    # That row is for the positive class; the negative class is the opposite.
     if coef.shape[0] == 1 and len(class_names) == 2:
         negative_class = class_names[0]
         positive_class = class_names[1]
-
         for feat_idx, feat_name in enumerate(feature_names):
             weight = float(coef[0, feat_idx])
-
-            rows.append(
-                {
-                    "class_name": negative_class,
-                    "feature": feat_name,
-                    "coefficient": -weight,
-                }
-            )
-            rows.append(
-                {
-                    "class_name": positive_class,
-                    "feature": feat_name,
-                    "coefficient": weight,
-                }
-            )
+            rows.append({"class_name": negative_class, "feature": feat_name, "coefficient": -weight})
+            rows.append({"class_name": positive_class, "feature": feat_name, "coefficient": weight})
     else:
-        # Multiclass case
         for class_idx, class_name in enumerate(class_names):
             for feat_idx, feat_name in enumerate(feature_names):
-                rows.append(
-                    {
-                        "class_name": class_name,
-                        "feature": feat_name,
-                        "coefficient": float(coef[class_idx, feat_idx]),
-                    }
-                )
+                rows.append({
+                    "class_name": class_name,
+                    "feature": feat_name,
+                    "coefficient": float(coef[class_idx, feat_idx]),
+                })
 
     coef_df = pd.DataFrame(rows)
     coef_df["abs_coefficient"] = coef_df["coefficient"].abs()
-    coef_df = coef_df.sort_values(
-        by=["class_name", "abs_coefficient"],
-        ascending=[True, False],
-    ).reset_index(drop=True)
-
+    coef_df = coef_df.sort_values(by=["class_name", "abs_coefficient"], ascending=[True, False]).reset_index(drop=True)
     return coef_df
 
 
@@ -165,9 +169,9 @@ def main():
         sublinear_tf=True,
     )
 
-    X_train = vectorizer.fit_transform(X_train_text)
-    X_val = vectorizer.transform(X_val_text)
-    X_test = vectorizer.transform(X_test_text)
+    X_train = build_features(vectorizer, X_train_text, fit=True)
+    X_val = build_features(vectorizer, X_val_text, fit=False)
+    X_test = build_features(vectorizer, X_test_text, fit=False)
 
     candidate_configs = [
         {"C": 0.05, "class_weight": None},
@@ -199,12 +203,7 @@ def main():
 
         val_pred = clf.predict(X_val)
         val_pred_labels = label_encoder.inverse_transform(val_pred)
-        val_report = classification_report(
-            y_val_labels,
-            val_pred_labels,
-            output_dict=True,
-            zero_division=0,
-        )
+        val_report = classification_report(y_val_labels, val_pred_labels, output_dict=True, zero_division=0)
 
         val_accuracy = accuracy_score(y_val_labels, val_pred_labels)
         val_macro_f1 = float(val_report["macro avg"]["f1-score"])
@@ -229,14 +228,23 @@ def main():
                 "val_weighted_f1": val_weighted_f1,
             }
 
+    # Retrain on train+val after model selection.
     combined_df = pd.concat([train_df, val_df], axis=0, ignore_index=True)
     X_trainval_text = combined_df["model_text"].tolist()
     y_trainval_labels = combined_df["repro_label"].tolist()
     y_trainval = label_encoder.fit_transform(y_trainval_labels)
 
-    X_trainval = vectorizer.fit_transform(X_trainval_text)
-    X_val_final = vectorizer.transform(X_val_text)
-    X_test_final = vectorizer.transform(X_test_text)
+    vectorizer_final = TfidfVectorizer(
+        lowercase=True,
+        strip_accents="unicode",
+        ngram_range=(1, 2),
+        min_df=2,
+        max_df=0.95,
+        max_features=80000,
+        sublinear_tf=True,
+    )
+    X_trainval = build_features(vectorizer_final, X_trainval_text, fit=True)
+    X_test_final = build_features(vectorizer_final, X_test_text, fit=False)
 
     best_clf = LogisticRegression(
         C=best["config"]["C"],
@@ -247,14 +255,13 @@ def main():
     )
     best_clf.fit(X_trainval, y_trainval)
 
-    final_val_metrics = evaluate_split("Validation", best_clf, X_val_final, y_val_labels, label_encoder)
     final_test_metrics = evaluate_split("Test", best_clf, X_test_final, y_test_labels, label_encoder)
 
-    joblib.dump(vectorizer, VECTORIZER_PATH)
+    joblib.dump(vectorizer_final, VECTORIZER_PATH)
     joblib.dump(best_clf, CLASSIFIER_PATH)
     joblib.dump(label_encoder, LABEL_ENCODER_PATH)
 
-    coef_df = build_coefficients_df(best_clf, vectorizer, label_encoder.classes_.tolist())
+    coef_df = build_coefficients_df(best_clf, vectorizer_final, label_encoder.classes_.tolist())
     coef_df.to_csv(COEFFICIENTS_PATH, index=False)
 
     metadata = {
@@ -263,6 +270,8 @@ def main():
         "classifier_type": "LogisticRegression",
         "input_text": "model_text_only",
         "target_column": "repro_label",
+        "feature_engineering": "tfidf_bigrams_plus_content_keyword_flags_v1",
+        "keyword_flag_names": list(KEYWORD_FLAGS.keys()),
         "selected_hyperparameters": {
             "C": best["config"]["C"],
             "class_weight": best["config"]["class_weight"],
@@ -272,20 +281,18 @@ def main():
         "test_rows": int(len(test_df)),
         "train_plus_val_rows": int(len(combined_df)),
         "label_classes": label_encoder.classes_.tolist(),
-        "vectorizer_params": make_json_safe(vectorizer.get_params()),
+        "vectorizer_params": make_json_safe(vectorizer_final.get_params()),
         "classifier_params": make_json_safe(best_clf.get_params()),
     }
 
     train_report = {
         "hyperparameter_search_results": make_json_safe(search_results),
         "best_validation_selection": make_json_safe(best),
-        "validation": make_json_safe(final_val_metrics),
-        "test": make_json_safe(final_test_metrics),
+        "test_final_model": make_json_safe(final_test_metrics),
     }
 
     with open(METADATA_PATH, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
-
     with open(TRAIN_REPORT_PATH, "w", encoding="utf-8") as f:
         json.dump(train_report, f, indent=2)
 

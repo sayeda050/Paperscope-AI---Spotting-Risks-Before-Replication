@@ -1,10 +1,10 @@
 {
   "active_model": "tfidf_logreg_auto_v2",
-  "updated_at": "2026-04-11T18:08:31.108817+00:00",
+  "updated_at": "2026-04-12T06:23:33.685095+00:00",
   "available_models": [
     "tfidf_logreg_auto_v2"
   ],
-  "model_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_auto_v2",
+  "model_path": "C:\\Users\\Admin\\Downloads\\PaperScope AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_auto_v2",
   "activeModelId": "tfidf_logreg_auto_v2",
   "models": [
     {

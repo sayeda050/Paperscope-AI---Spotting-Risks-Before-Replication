@@ -1,31 +1,52 @@
-import sys
-from pathlib import Path
-import argparse
+
+from __future__ import annotations
+
 import json
 import math
+from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
+import scipy.sparse as sp
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-SRC_DIR = Path(__file__).resolve().parent
-BASE_DIR = SRC_DIR.parent
-BACKEND_DIR = BASE_DIR.parent / "backend"
+from discover_pdf_features import ATTRIBUTE_ORDER, extract_feature_record
+from utils import clean_text, risk_label_from_score
 
-if str(SRC_DIR) not in sys.path:
-    sys.path.append(str(SRC_DIR))
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.append(str(BACKEND_DIR))
-
-from apps.analysis.model_registry_service import (
-    build_text_input,
-    build_score_feature_row,
-    DEFAULT_SCORE_FEATURE_COLUMNS,
-)
-from utils import clean_text
-
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODEL_DIR = BASE_DIR / "outputs" / "models" / "tfidf_logreg_auto_v3"
 DATA_FILE = BASE_DIR / "data" / "processed" / "gold_score_dataset.csv"
+
+
+def load_gold_dataset(path: Path):
+    if not path.exists():
+        raise FileNotFoundError(f"Gold score dataset not found: {path}")
+
+    df = pd.read_csv(path)
+    required = {"title", "abstract", "model_text", "target_score"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Gold score dataset is missing columns: {sorted(missing)}")
+
+    df = df.copy()
+    df["title"] = df["title"].fillna("").astype(str).map(clean_text)
+    df["abstract"] = df["abstract"].fillna("").astype(str).map(clean_text)
+    df["model_text"] = df["model_text"].fillna("").astype(str)
+    df["target_score"] = pd.to_numeric(df["target_score"], errors="coerce")
+    if "page_count" not in df.columns:
+        df["page_count"] = 0
+    df["page_count"] = pd.to_numeric(df["page_count"], errors="coerce").fillna(0).astype(int)
+    df = df[df["target_score"].notna()].copy()
+    df = df[(df["target_score"] >= 0.0) & (df["target_score"] <= 100.0)].copy()
+    df = df[df["model_text"].str.len() > 0].copy()
+    return df.reset_index(drop=True)
+
+
+def build_classifier_matrix(vectorizer, texts: list[str], explicit_feature_df: pd.DataFrame):
+    X_text = vectorizer.transform(texts)
+    X_num = sp.csr_matrix(explicit_feature_df[ATTRIBUTE_ORDER].astype(float).to_numpy())
+    return sp.hstack([X_text, X_num], format="csr")
 
 
 def safe_predict_proba(classifier, X, label_encoder):
@@ -39,12 +60,37 @@ def safe_predict_proba(classifier, X, label_encoder):
     return {}
 
 
+def build_score_feature_row(row: pd.Series, pred_probs: dict) -> dict:
+    record = extract_feature_record(
+        {
+            "paper_uid": row.get("paper_uid", ""),
+            "title": row.get("title", ""),
+            "abstract": row.get("abstract", ""),
+            "keywords": row.get("keywords", ""),
+            "raw_text": row.get("model_text", ""),
+        }
+    )
+    supported = sum(1 for a in record["attributes"] if a["state"] == "SUPPORTED")
+    partial = sum(1 for a in record["attributes"] if a["state"] == "PARTIAL")
+    missing = sum(1 for a in record["attributes"] if a["state"] == "NOT_FOUND")
+    attr_map = {a["name"]: a for a in record["attributes"]}
+    out = {name: float(attr_map[name]["value"]) for name in ATTRIBUTE_ORDER}
+    out.update(
+        {
+            "supported_count": float(supported),
+            "partial_count": float(partial),
+            "missing_count": float(missing),
+            "classifier_prob_yes": float(pred_probs.get("YES", 0.0)),
+            "classifier_prob_no": float(pred_probs.get("NO", 0.0)),
+            "model_text_chars": float(len(str(row.get("model_text", "") or ""))),
+            "page_count": float(row.get("page_count", 0) or 0),
+        }
+    )
+    return out
+
+
 def score_to_band(score: float) -> str:
-    if score < 35.0:
-        return "Low"
-    if score < 65.0:
-        return "Med"
-    return "High"
+    return risk_label_from_score(score)
 
 
 def evaluate_regression(y_true, y_pred):
@@ -56,55 +102,52 @@ def evaluate_regression(y_true, y_pred):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate a trained score calibrator on the labeled score dataset.")
-    parser.add_argument("--model-name", default="tfidf_logreg_auto_v2")
-    args = parser.parse_args()
-
-    model_dir = BASE_DIR / "outputs" / "models" / args.model_name
-    calibrator_path = model_dir / "score_calibrator.joblib"
+    calibrator_path = MODEL_DIR / "score_calibrator.joblib"
+    feature_cols_path = MODEL_DIR / "score_feature_columns.json"
     if not calibrator_path.exists():
         raise FileNotFoundError(f"Missing score calibrator artifact: {calibrator_path}")
+    if not feature_cols_path.exists():
+        raise FileNotFoundError(f"Missing score feature column file: {feature_cols_path}")
 
-    df = pd.read_csv(DATA_FILE)
-    df["title"] = df["title"].fillna("").astype(str).map(clean_text)
-    df["abstract"] = df["abstract"].fillna("").astype(str).map(clean_text)
-    df["model_text"] = df["model_text"].fillna("").astype(str).map(clean_text)
-    df["target_score"] = pd.to_numeric(df["target_score"], errors="coerce")
-    df = df[df["target_score"].notna()].copy().reset_index(drop=True)
-
-    metadata = json.loads((model_dir / "metadata.json").read_text(encoding="utf-8")) if (model_dir / "metadata.json").exists() else {}
-    vectorizer = joblib.load(model_dir / "vectorizer.joblib")
-    classifier = joblib.load(model_dir / "classifier.joblib")
-    label_encoder = joblib.load(model_dir / "label_encoder.joblib")
+    df = load_gold_dataset(DATA_FILE)
+    vectorizer = joblib.load(MODEL_DIR / "vectorizer.joblib")
+    classifier = joblib.load(MODEL_DIR / "classifier.joblib")
+    label_encoder = joblib.load(MODEL_DIR / "label_encoder.joblib")
     calibrator = joblib.load(calibrator_path)
+    feature_columns = json.loads(feature_cols_path.read_text(encoding="utf-8"))
+
+    explicit_rows = []
+    texts = []
+    for _, row in df.iterrows():
+        record = extract_feature_record(
+            {
+                "paper_uid": row.get("paper_uid", ""),
+                "title": row.get("title", ""),
+                "abstract": row.get("abstract", ""),
+                "keywords": row.get("keywords", ""),
+                "raw_text": row.get("model_text", ""),
+            }
+        )
+        explicit_rows.append({a["name"]: a["value"] for a in record["attributes"]})
+        texts.append(str(row.get("model_text", "")))
+
+    explicit_df = pd.DataFrame(explicit_rows)
+    for col in ATTRIBUTE_ORDER:
+        if col not in explicit_df.columns:
+            explicit_df[col] = 0.0
+    X_cls = build_classifier_matrix(vectorizer, texts, explicit_df)
+    pred_prob_rows = [safe_predict_proba(classifier, X_cls[i], label_encoder) for i in range(X_cls.shape[0])]
 
     rows = []
-    for _, item in df.iterrows():
-        payload = {
-            "title": item.get("title", ""),
-            "abstract": item.get("abstract", ""),
-            "model_text": item.get("model_text", ""),
-            "review_text": "",
-            "decision_text": "",
-            "venue": item.get("venue", ""),
-            "year": item.get("year", 0),
-            "review_count": 0,
-        }
-        text_input = build_text_input(payload, metadata)
-        X_text = vectorizer.transform([text_input])
-        pred_numeric = classifier.predict(X_text)[0]
-        pred_label = label_encoder.inverse_transform([pred_numeric])[0]
-        pred_probs = safe_predict_proba(classifier, X_text, label_encoder)
-        prediction = {"prediction": pred_label, "probabilities": pred_probs}
-        rows.append(build_score_feature_row(payload, prediction))
+    for (_, item), probs in zip(df.iterrows(), pred_prob_rows):
+        rows.append(build_score_feature_row(item, probs))
 
     X_score = pd.DataFrame(rows)
-    for col in DEFAULT_SCORE_FEATURE_COLUMNS:
+    for col in feature_columns:
         if col not in X_score.columns:
             X_score[col] = 0.0
-    X_score = X_score[DEFAULT_SCORE_FEATURE_COLUMNS].copy()
-    for col in X_score.columns:
         X_score[col] = pd.to_numeric(X_score[col], errors="coerce").fillna(0.0).astype(float)
+    X_score = X_score[feature_columns].copy()
 
     y_true = df["target_score"].astype(float).to_numpy()
     y_pred = np.clip(calibrator.predict(X_score), 0.0, 100.0)
@@ -116,7 +159,7 @@ def main():
     out_df["true_band"] = out_df["target_score"].map(score_to_band)
     out_df["predicted_band"] = out_df["predicted_score"].map(score_to_band)
 
-    out_path = model_dir / "score_calibrator_full_eval_predictions.csv"
+    out_path = MODEL_DIR / "score_calibrator_full_eval_predictions.csv"
     out_df.to_csv(out_path, index=False)
 
     summary = {
@@ -127,15 +170,12 @@ def main():
         "band_accuracy": band_accuracy,
         "predictions_csv": str(out_path),
     }
-    summary_path = model_dir / "score_calibrator_full_eval.json"
+    summary_path = MODEL_DIR / "score_calibrator_full_eval.json"
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
     print(f"✅ Full evaluation predictions saved to: {out_path}")
-    print(f"✅ Full evaluation summary saved to: {summary_path}")
-    print("MAE:", round(mae, 4))
-    print("RMSE:", round(rmse, 4))
-    print("Spearman:", round(spearman, 4))
-    print("Band accuracy:", round(band_accuracy, 4))
+    print(f"✅ Summary saved to: {summary_path}")
+    print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":

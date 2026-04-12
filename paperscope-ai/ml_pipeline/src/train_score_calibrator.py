@@ -1,54 +1,38 @@
-import sys
-from pathlib import Path
-import argparse
+
+from __future__ import annotations
+
 import json
 import math
+from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+import scipy.sparse as sp
+from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.model_selection import train_test_split
 
-SRC_DIR = Path(__file__).resolve().parent
-BASE_DIR = SRC_DIR.parent
-BACKEND_DIR = BASE_DIR.parent / "backend"
+from discover_pdf_features import ATTRIBUTE_ORDER, extract_feature_record
+from utils import clean_text, ensure_dir, risk_label_from_score
 
-if str(SRC_DIR) not in sys.path:
-    sys.path.append(str(SRC_DIR))
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.append(str(BACKEND_DIR))
-
-from apps.analysis.model_registry_service import (
-    build_text_input,
-    build_score_feature_row,
-    DEFAULT_SCORE_FEATURE_COLUMNS,
-)
-from utils import ensure_dir, clean_text
-
+BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_FILE = BASE_DIR / "data" / "processed" / "gold_score_dataset.csv"
-DEFAULT_MODEL_DIR = BASE_DIR / "outputs" / "models" / "tfidf_logreg_auto_v2"
+DEFAULT_MODEL_DIR = BASE_DIR / "outputs" / "models" / "tfidf_logreg_auto_v3"
 
 
-def safe_predict_proba(classifier, X, label_encoder):
-    try:
-        if hasattr(classifier, "predict_proba"):
-            proba = classifier.predict_proba(X)[0]
-            classes = label_encoder.classes_.tolist()
-            return {classes[i]: float(proba[i]) for i in range(len(classes))}
-    except Exception:
-        pass
-
-    return {}
-
-
-def score_to_band(score: float) -> str:
-    if score < 35.0:
-        return "Low"
-    if score < 65.0:
-        return "Med"
-    return "High"
+SCORE_FEATURE_COLUMNS = (
+    ATTRIBUTE_ORDER
+    + [
+        "supported_count",
+        "partial_count",
+        "missing_count",
+        "classifier_prob_yes",
+        "classifier_prob_no",
+        "model_text_chars",
+        "page_count",
+    ]
+)
 
 
 def load_gold_dataset(path: Path):
@@ -64,60 +48,68 @@ def load_gold_dataset(path: Path):
     df = df.copy()
     df["title"] = df["title"].fillna("").astype(str).map(clean_text)
     df["abstract"] = df["abstract"].fillna("").astype(str).map(clean_text)
-    df["model_text"] = df["model_text"].fillna("").astype(str).map(clean_text)
+    df["model_text"] = df["model_text"].fillna("").astype(str)
     df["target_score"] = pd.to_numeric(df["target_score"], errors="coerce")
+    if "page_count" not in df.columns:
+        df["page_count"] = 0
+    df["page_count"] = pd.to_numeric(df["page_count"], errors="coerce").fillna(0).astype(int)
     df = df[df["target_score"].notna()].copy()
     df = df[(df["target_score"] >= 0.0) & (df["target_score"] <= 100.0)].copy()
     df = df[df["model_text"].str.len() > 0].copy()
 
     if len(df) < 60:
         raise RuntimeError("Too few labeled rows. Label at least 60 papers before training the score calibrator.")
-
     return df.reset_index(drop=True)
 
 
-def build_feature_table(df: pd.DataFrame, model_dir: Path):
-    metadata = json.loads((model_dir / "metadata.json").read_text(encoding="utf-8")) if (model_dir / "metadata.json").exists() else {}
-    vectorizer = joblib.load(model_dir / "vectorizer.joblib")
-    classifier = joblib.load(model_dir / "classifier.joblib")
-    label_encoder = joblib.load(model_dir / "label_encoder.joblib")
+def build_classifier_matrix(vectorizer, texts: list[str], explicit_feature_df: pd.DataFrame):
+    X_text = vectorizer.transform(texts)
+    X_num = sp.csr_matrix(explicit_feature_df[ATTRIBUTE_ORDER].astype(float).to_numpy())
+    return sp.hstack([X_text, X_num], format="csr")
 
-    rows = []
-    for _, item in df.iterrows():
-        payload = {
-            "title": item.get("title", ""),
-            "abstract": item.get("abstract", ""),
-            "model_text": item.get("model_text", ""),
-            "review_text": "",
-            "decision_text": "",
-            "venue": item.get("venue", ""),
-            "year": item.get("year", 0),
-            "review_count": 0,
+
+def safe_predict_proba(classifier, X, label_encoder):
+    try:
+        if hasattr(classifier, "predict_proba"):
+            proba = classifier.predict_proba(X)[0]
+            classes = label_encoder.classes_.tolist()
+            return {classes[i]: float(proba[i]) for i in range(len(classes))}
+    except Exception:
+        pass
+    return {}
+
+
+def build_score_feature_row(row: pd.Series, pred_probs: dict) -> dict:
+    record = extract_feature_record(
+        {
+            "paper_uid": row.get("paper_uid", ""),
+            "title": row.get("title", ""),
+            "abstract": row.get("abstract", ""),
+            "keywords": row.get("keywords", ""),
+            "raw_text": row.get("model_text", ""),
         }
-
-        text_input = build_text_input(payload, metadata)
-        X_text = vectorizer.transform([text_input])
-
-        pred_numeric = classifier.predict(X_text)[0]
-        pred_label = label_encoder.inverse_transform([pred_numeric])[0]
-        pred_probs = safe_predict_proba(classifier, X_text, label_encoder)
-
-        prediction = {
-            "prediction": pred_label,
-            "probabilities": pred_probs,
+    )
+    attr_map = {a["name"]: a for a in record["attributes"]}
+    supported = sum(1 for a in record["attributes"] if a["state"] == "SUPPORTED")
+    partial = sum(1 for a in record["attributes"] if a["state"] == "PARTIAL")
+    missing = sum(1 for a in record["attributes"] if a["state"] == "NOT_FOUND")
+    out = {name: float(attr_map[name]["value"]) for name in ATTRIBUTE_ORDER}
+    out.update(
+        {
+            "supported_count": float(supported),
+            "partial_count": float(partial),
+            "missing_count": float(missing),
+            "classifier_prob_yes": float(pred_probs.get("YES", 0.0)),
+            "classifier_prob_no": float(pred_probs.get("NO", 0.0)),
+            "model_text_chars": float(len(str(row.get("model_text", "") or ""))),
+            "page_count": float(row.get("page_count", 0) or 0),
         }
-        rows.append(build_score_feature_row(payload, prediction))
+    )
+    return out
 
-    feature_df = pd.DataFrame(rows)
-    for col in DEFAULT_SCORE_FEATURE_COLUMNS:
-        if col not in feature_df.columns:
-            feature_df[col] = 0.0
-    feature_df = feature_df[DEFAULT_SCORE_FEATURE_COLUMNS].copy()
 
-    for col in feature_df.columns:
-        feature_df[col] = pd.to_numeric(feature_df[col], errors="coerce").fillna(0.0).astype(float)
-
-    return feature_df
+def score_to_band(score: float) -> str:
+    return risk_label_from_score(score)
 
 
 def evaluate_regression(y_true, y_pred):
@@ -126,43 +118,63 @@ def evaluate_regression(y_true, y_pred):
     y_true_s = pd.Series(y_true)
     y_pred_s = pd.Series(y_pred)
     spearman = float(y_true_s.corr(y_pred_s, method="spearman")) if len(y_true_s) > 1 else 0.0
-
-    true_band = y_true_s.map(score_to_band)
-    pred_band = y_pred_s.map(score_to_band)
-    band_accuracy = float((true_band == pred_band).mean())
-
+    band_accuracy = float((y_true_s.map(score_to_band) == y_pred_s.map(score_to_band)).mean())
     return {
         "mae": mae,
         "rmse": rmse,
-        "spearman": spearman if not np.isnan(spearman) else 0.0,
+        "spearman": 0.0 if np.isnan(spearman) else spearman,
         "band_accuracy": band_accuracy,
     }
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train a learned score calibrator on top of an existing classifier.")
-    parser.add_argument("--model-name", default="tfidf_logreg_auto_v2")
-    parser.add_argument("--random-state", type=int, default=42)
-    args = parser.parse_args()
-
-    model_dir = BASE_DIR / "outputs" / "models" / args.model_name
+    model_dir = DEFAULT_MODEL_DIR
     if not model_dir.exists():
         raise FileNotFoundError(f"Model directory not found: {model_dir}")
 
     df = load_gold_dataset(DATA_FILE)
-    X = build_feature_table(df, model_dir)
+
+    vectorizer = joblib.load(model_dir / "vectorizer.joblib")
+    classifier = joblib.load(model_dir / "classifier.joblib")
+    label_encoder = joblib.load(model_dir / "label_encoder.joblib")
+
+    explicit_rows = []
+    texts = []
+    for _, row in df.iterrows():
+        record = extract_feature_record(
+            {
+                "paper_uid": row.get("paper_uid", ""),
+                "title": row.get("title", ""),
+                "abstract": row.get("abstract", ""),
+                "keywords": row.get("keywords", ""),
+                "raw_text": row.get("model_text", ""),
+            }
+        )
+        attr_row = {a["name"]: a["value"] for a in record["attributes"]}
+        explicit_rows.append(attr_row)
+        texts.append(str(row.get("model_text", "")))
+
+    explicit_df = pd.DataFrame(explicit_rows)
+    for col in ATTRIBUTE_ORDER:
+        if col not in explicit_df.columns:
+            explicit_df[col] = 0.0
+    X_cls = build_classifier_matrix(vectorizer, texts, explicit_df)
+    pred_prob_rows = [safe_predict_proba(classifier, X_cls[i], label_encoder) for i in range(X_cls.shape[0])]
+
+    feature_rows = []
+    for (_, row), probs in zip(df.iterrows(), pred_prob_rows):
+        feature_rows.append(build_score_feature_row(row, probs))
+
+    X = pd.DataFrame(feature_rows)
+    for col in SCORE_FEATURE_COLUMNS:
+        if col not in X.columns:
+            X[col] = 0.0
+        X[col] = pd.to_numeric(X[col], errors="coerce").fillna(0.0).astype(float)
+    X = X[SCORE_FEATURE_COLUMNS].copy()
     y = df["target_score"].astype(float).to_numpy()
 
-    train_idx, temp_idx = train_test_split(
-        np.arange(len(df)),
-        test_size=0.30,
-        random_state=args.random_state,
-    )
-    val_idx, test_idx = train_test_split(
-        temp_idx,
-        test_size=0.50,
-        random_state=args.random_state,
-    )
+    train_idx, temp_idx = train_test_split(np.arange(len(df)), test_size=0.30, random_state=42)
+    val_idx, test_idx = train_test_split(temp_idx, test_size=0.50, random_state=42)
 
     X_train = X.iloc[train_idx].reset_index(drop=True)
     y_train = y[train_idx]
@@ -172,34 +184,10 @@ def main():
     y_test = y[test_idx]
 
     candidates = [
-        ("rf_300_depth_none_leaf2", RandomForestRegressor(
-            n_estimators=300,
-            max_depth=None,
-            min_samples_leaf=2,
-            random_state=args.random_state,
-            n_jobs=-1,
-        )),
-        ("rf_500_depth_12_leaf2", RandomForestRegressor(
-            n_estimators=500,
-            max_depth=12,
-            min_samples_leaf=2,
-            random_state=args.random_state,
-            n_jobs=-1,
-        )),
-        ("gbr_200_lr005_depth3", GradientBoostingRegressor(
-            n_estimators=200,
-            learning_rate=0.05,
-            max_depth=3,
-            random_state=args.random_state,
-            subsample=0.9,
-        )),
-        ("gbr_400_lr003_depth3", GradientBoostingRegressor(
-            n_estimators=400,
-            learning_rate=0.03,
-            max_depth=3,
-            random_state=args.random_state,
-            subsample=0.9,
-        )),
+        ("rf_400_depth_none_leaf2", RandomForestRegressor(n_estimators=400, max_depth=None, min_samples_leaf=2, random_state=42, n_jobs=-1)),
+        ("rf_600_depth_12_leaf2", RandomForestRegressor(n_estimators=600, max_depth=12, min_samples_leaf=2, random_state=42, n_jobs=-1)),
+        ("gbr_250_lr005_depth3", GradientBoostingRegressor(n_estimators=250, learning_rate=0.05, max_depth=3, random_state=42, subsample=0.9)),
+        ("gbr_400_lr003_depth3", GradientBoostingRegressor(n_estimators=400, learning_rate=0.03, max_depth=3, random_state=42, subsample=0.9)),
     ]
 
     search_rows = []
@@ -212,10 +200,7 @@ def main():
         val_pred = np.clip(model.predict(X_val), 0.0, 100.0)
         metrics = evaluate_regression(y_val, val_pred)
         search_rows.append({"model": name, **metrics})
-
-        if best_metrics is None or metrics["mae"] < best_metrics["mae"] or (
-            metrics["mae"] == best_metrics["mae"] and metrics["rmse"] < best_metrics["rmse"]
-        ):
+        if best_metrics is None or metrics["mae"] < best_metrics["mae"] or (metrics["mae"] == best_metrics["mae"] and metrics["rmse"] < best_metrics["rmse"]):
             best_name = name
             best_model = model
             best_metrics = metrics
@@ -244,9 +229,8 @@ def main():
     holdout_path = model_dir / "score_calibrator_holdout_predictions.csv"
 
     ensure_dir(model_dir)
-
     joblib.dump(final_model, calibrator_path)
-    feature_cols_path.write_text(json.dumps(DEFAULT_SCORE_FEATURE_COLUMNS, indent=2), encoding="utf-8")
+    feature_cols_path.write_text(json.dumps(SCORE_FEATURE_COLUMNS, indent=2), encoding="utf-8")
     holdout_df.to_csv(holdout_path, index=False)
 
     report = {
@@ -255,7 +239,7 @@ def main():
         "val_rows": int(len(val_idx)),
         "test_rows": int(len(test_idx)),
         "selected_model": best_name,
-        "feature_count": int(len(DEFAULT_SCORE_FEATURE_COLUMNS)),
+        "feature_count": int(len(SCORE_FEATURE_COLUMNS)),
         "validation_search": search_rows,
         "best_validation_metrics": best_metrics,
         "test_metrics": test_metrics,
@@ -275,23 +259,14 @@ def main():
         except Exception:
             metadata = {}
     metadata["score_calibrator"] = {
-        "enabled": True,
-        "model_type": best_name,
-        "feature_count": len(DEFAULT_SCORE_FEATURE_COLUMNS),
-        "test_metrics": test_metrics,
+        "selected_model": best_name,
+        "feature_columns_path": str(feature_cols_path),
+        "report_path": str(report_path),
     }
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
     print(f"✅ Score calibrator saved to: {calibrator_path}")
-    print(f"✅ Score feature columns saved to: {feature_cols_path}")
-    print(f"✅ Score calibrator report saved to: {report_path}")
-    print(f"✅ Holdout predictions saved to: {holdout_path}")
-    print("\nSelected calibrator:", best_name)
-    print("Validation MAE:", round(best_metrics["mae"], 4))
-    print("Test MAE:", round(test_metrics["mae"], 4))
-    print("Test RMSE:", round(test_metrics["rmse"], 4))
-    print("Test Spearman:", round(test_metrics["spearman"], 4))
-    print("Test band accuracy:", round(test_metrics["band_accuracy"], 4))
+    print(f"✅ Calibrator report saved to: {report_path}")
 
 
 if __name__ == "__main__":

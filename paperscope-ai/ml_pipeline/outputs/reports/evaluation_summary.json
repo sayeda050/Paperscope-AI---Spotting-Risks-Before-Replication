@@ -32,7 +32,7 @@
     }
   },
   "test_rows": 70,
-  "model_dir": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\tfidf_logreg_auto_v2",
+  "model_dir": "C:\\Users\\Admin\\Downloads\\PaperScope AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\tfidf_logreg_auto_v2",
   "feature_engineering": "tfidf_bigrams_plus_content_keyword_flags_v1",
   "used_keyword_flags": true
 }

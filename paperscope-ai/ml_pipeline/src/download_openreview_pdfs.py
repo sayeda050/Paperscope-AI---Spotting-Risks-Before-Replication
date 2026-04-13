@@ -1,254 +1,275 @@
-import sys
-from pathlib import Path
-import json
-import time
-import hashlib
+"""
+download_openreview_pdfs.py — Download PDFs for all domains from the unified raw dataset.
+
+Reads:  data/raw/unified_raw_dataset.jsonl   (or openreview_raw.jsonl as fallback)
+Writes: data/processed/linked_with_pdfs.jsonl
+        outputs/reports/pdf_download_report.json
+
+Works for both OpenReview (https://openreview.net/pdf?id=...) and
+arXiv (https://arxiv.org/pdf/...) URLs — the URL resolution logic handles both.
+"""
+from __future__ import annotations
+
 import argparse
+import hashlib
+import json
 import re
+import sys
+import time
+from pathlib import Path
 
 import requests
 from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 from tqdm import tqdm
+from urllib3.util.retry import Retry
 
 SRC_DIR = Path(__file__).resolve().parent
 if str(SRC_DIR) not in sys.path:
     sys.path.append(str(SRC_DIR))
 
-from utils import read_jsonl, write_jsonl, ensure_dir, clean_text
+from utils import (
+    PIPELINE_SCHEMA_VERSION,
+    clean_text,
+    ensure_dir,
+    read_jsonl,
+    write_json,
+    write_jsonl,
+)
 
-PIPELINE_DIR = SRC_DIR.parent
-IN_FILE = PIPELINE_DIR / "data" / "raw" / "openreview_raw.jsonl"
-PDF_DIR = PIPELINE_DIR / "data" / "pdfs" / "openreview"
-OUT_FILE = PIPELINE_DIR / "data" / "processed" / "linked_with_pdfs.jsonl"
-REPORT_FILE = PIPELINE_DIR / "outputs" / "reports" / "pdf_download_report.json"
+PIPELINE_DIR  = SRC_DIR.parent
+# Read from unified dataset if it exists, fall back to openreview-only
+_UNIFIED      = PIPELINE_DIR / "data" / "raw" / "unified_raw_dataset.jsonl"
+_OR_ONLY      = PIPELINE_DIR / "data" / "raw" / "openreview_raw.jsonl"
+IN_FILE       = _UNIFIED if _UNIFIED.exists() else _OR_ONLY
+PDF_BASE_DIR  = PIPELINE_DIR / "data" / "pdfs"
+OUT_FILE      = PIPELINE_DIR / "data" / "processed" / "linked_with_pdfs.jsonl"
+REPORT_FILE   = PIPELINE_DIR / "outputs" / "reports" / "pdf_download_report.json"
 
-TIMEOUT_SECONDS = 90
+TIMEOUT_SECS  = 90
 
 
-def build_safe_filename(row: dict, fallback_index: int) -> str:
-    paper_uid = clean_text(row.get("paper_uid", "")) or f"paper_{fallback_index}"
-    digest = hashlib.md5(paper_uid.encode("utf-8")).hexdigest()[:10]
-    safe_uid = re.sub(r"[^a-zA-Z0-9_\-]+", "_", paper_uid)[:120]
-    return f"{safe_uid}_{digest}.pdf"
+def get_pdf_dir(domain: str) -> Path:
+    """Each domain gets its own subfolder: data/pdfs/{domain}/"""
+    return PDF_BASE_DIR / (domain or "unknown")
+
+
+def build_safe_filename(row: dict, idx: int) -> str:
+    uid    = clean_text(row.get("paper_uid", "")) or f"paper_{idx}"
+    digest = hashlib.md5(uid.encode()).hexdigest()[:10]
+    safe   = re.sub(r"[^a-zA-Z0-9_\-]+", "_", uid)[:100]
+    return f"{safe}_{digest}.pdf"
 
 
 def resolve_pdf_url(raw_url: str) -> str:
     raw_url = (raw_url or "").strip()
     if not raw_url:
         return ""
-    if raw_url.startswith("http://") or raw_url.startswith("https://"):
+    if raw_url.startswith(("http://", "https://")):
         return raw_url
     if raw_url.startswith("/"):
         return f"https://openreview.net{raw_url}"
     return raw_url
 
 
-def build_candidate_urls(row: dict):
-    urls = []
+def build_candidate_urls(row: dict) -> list[str]:
+    urls: list[str] = []
+    raw_pdf = resolve_pdf_url(row.get("pdf_url", ""))
+    or_id   = (row.get("openreview_id", "") or "").strip()
+    forum   = (row.get("forum_id", "") or "").strip()
+    arxiv   = (row.get("direct_arxiv_id", "") or "").strip()
 
-    raw_pdf_url = resolve_pdf_url(row.get("pdf_url", ""))
-    openreview_id = (row.get("openreview_id", "") or "").strip()
-    forum_id = (row.get("forum_id", "") or "").strip()
+    if raw_pdf:
+        urls.append(raw_pdf)
+    if or_id:
+        urls.append(f"https://openreview.net/pdf?id={or_id}")
+    if forum and forum != or_id:
+        urls.append(f"https://openreview.net/pdf?id={forum}")
+    if arxiv:
+        # Normalize arXiv ID: replace underscores back to dots
+        arxiv_normalized = arxiv.replace("_", ".")
+        urls.append(f"https://arxiv.org/pdf/{arxiv_normalized}.pdf")
 
-    if raw_pdf_url:
-        urls.append(raw_pdf_url)
-
-    # Strong fallbacks for OpenReview PDF endpoint
-    if openreview_id:
-        urls.append(f"https://openreview.net/pdf?id={openreview_id}")
-    if forum_id and forum_id != openreview_id:
-        urls.append(f"https://openreview.net/pdf?id={forum_id}")
-
-    # remove duplicates while keeping order
-    seen = set()
-    unique_urls = []
-    for u in urls:
-        if u and u not in seen:
-            seen.add(u)
-            unique_urls.append(u)
-
-    return unique_urls
+    seen: set[str] = set()
+    return [u for u in urls if u and not (seen.add(u) or u in seen - {u})]
 
 
-def build_session():
+def build_session() -> requests.Session:
     session = requests.Session()
-
     retry = Retry(
         total=5,
         connect=5,
         read=5,
-        backoff_factor=1.0,
+        backoff_factor=1.2,
         status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods=["GET"],
         raise_on_status=False,
     )
-
     adapter = HTTPAdapter(max_retries=retry)
-    session.mount("http://", adapter)
+    session.mount("http://",  adapter)
     session.mount("https://", adapter)
-
-    session.headers.update(
-        {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/123.0.0.0 Safari/537.36"
-            ),
-            "Accept": "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://openreview.net/",
-            "Connection": "keep-alive",
-        }
-    )
+    session.headers.update({
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/123.0.0.0 Safari/537.36"
+        ),
+        "Accept":          "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer":         "https://openreview.net/",
+        "Connection":      "keep-alive",
+    })
     return session
 
 
 def looks_like_pdf(first_bytes: bytes, content_type: str) -> bool:
-    content_type = (content_type or "").lower()
-
-    if "application/pdf" in content_type:
+    ct = (content_type or "").lower()
+    if "application/pdf" in ct:
         return True
-    if "application/octet-stream" in content_type:
+    if "application/octet-stream" in ct:
         return True
-
-    # Some servers mislabel content-type; trust PDF signature too
     if first_bytes.startswith(b"%PDF"):
         return True
-
     return False
 
 
-def download_from_candidates(session, candidate_urls, out_path: Path):
+def download_from_candidates(
+    session: requests.Session,
+    candidate_urls: list[str],
+    out_path: Path,
+) -> tuple[bool, str, str]:
     last_error = "no_candidate_url"
-
     for url in candidate_urls:
-        tmp_path = out_path.with_suffix(".tmp")
+        tmp = out_path.with_suffix(".tmp")
         try:
-            with session.get(url, timeout=TIMEOUT_SECONDS, stream=True) as resp:
+            with session.get(url, timeout=TIMEOUT_SECS, stream=True) as resp:
                 if resp.status_code != 200:
                     last_error = f"http_{resp.status_code}"
                     continue
-
-                content_type = resp.headers.get("Content-Type", "")
-                iterator = resp.iter_content(chunk_size=1024 * 256)
-
-                first_chunk = b""
-                for chunk in iterator:
+                ct      = resp.headers.get("Content-Type", "")
+                itr     = resp.iter_content(chunk_size=256 * 1024)
+                first   = b""
+                for chunk in itr:
                     if chunk:
-                        first_chunk = chunk
+                        first = chunk
                         break
-
-                if not first_chunk:
+                if not first:
                     last_error = "empty_response"
                     continue
-
-                if not looks_like_pdf(first_chunk, content_type):
-                    preview = first_chunk[:120].decode("utf-8", errors="ignore").strip().replace("\n", " ")
-                    last_error = f"not_pdf_content_type={content_type} preview={preview[:80]}"
+                if not looks_like_pdf(first, ct):
+                    preview = first[:100].decode("utf-8", errors="ignore").replace("\n", " ")
+                    last_error = f"not_pdf|ct={ct}|preview={preview[:60]}"
                     continue
-
-                with tmp_path.open("wb") as f:
-                    f.write(first_chunk)
-                    for chunk in iterator:
+                with tmp.open("wb") as f:
+                    f.write(first)
+                    for chunk in itr:
                         if chunk:
                             f.write(chunk)
-
-                if tmp_path.exists() and tmp_path.stat().st_size > 1000:
-                    tmp_path.replace(out_path)
+                if tmp.exists() and tmp.stat().st_size > 1000:
+                    tmp.replace(out_path)
                     return True, "", url
-                else:
-                    last_error = "downloaded_file_too_small"
-                    if tmp_path.exists():
-                        tmp_path.unlink(missing_ok=True)
-
-        except Exception as e:
-            last_error = str(e)
-            if tmp_path.exists():
-                tmp_path.unlink(missing_ok=True)
-
+                last_error = "file_too_small"
+                tmp.unlink(missing_ok=True)
+        except Exception as exc:
+            last_error = str(exc)
+            tmp.unlink(missing_ok=True)
     return False, last_error, ""
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Download PDFs directly from OpenReview.")
-    parser.add_argument("--max-papers", type=int, default=1000)
-    parser.add_argument("--only-missing", action="store_true")
-    parser.add_argument("--sleep-seconds", type=float, default=0.15)
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Download PDFs for all domains from the unified raw dataset."
+    )
+    parser.add_argument("--max-papers",   type=int,   default=2000)
+    parser.add_argument("--only-missing", action="store_true",
+                        help="Skip papers whose PDF already exists on disk.")
+    parser.add_argument("--sleep-seconds", type=float, default=0.20,
+                        help="Polite delay between downloads (default 0.20s).")
+    parser.add_argument(
+        "--input-file", default="",
+        help="Override input JSONL path (default: unified_raw_dataset.jsonl or openreview_raw.jsonl).",
+    )
+    parser.add_argument(
+        "--domain", default="",
+        help="Filter to a specific domain (default: all domains).",
+    )
     args = parser.parse_args()
 
-    ensure_dir(PDF_DIR)
+    in_file = Path(args.input_file) if args.input_file else IN_FILE
+    if not in_file.exists():
+        raise FileNotFoundError(
+            f"Input file not found: {in_file}\n"
+            "Run collect_openreview.py and/or merge_raw_data.py first."
+        )
+
+    ensure_dir(PDF_BASE_DIR)
     ensure_dir(OUT_FILE.parent)
     ensure_dir(REPORT_FILE.parent)
 
-    rows = read_jsonl(IN_FILE)
+    rows = read_jsonl(in_file)
     if not rows:
-        raise FileNotFoundError(f"No rows found in {IN_FILE}. Run collect_openreview.py first.")
+        raise FileNotFoundError(f"No rows in {in_file}")
 
-    session = build_session()
+    if args.domain:
+        rows = [r for r in rows if r.get("domain", "") == args.domain]
+        print(f"Filtered to domain {args.domain!r}: {len(rows)} rows")
 
-    updated = []
-    processed = 0
-    downloaded_ok = 0
-    already_present = 0
-    failed = 0
-    skipped_no_url = 0
-    errors = []
+    session  = build_session()
+    updated: list[dict] = []
+    processed = downloaded_ok = already_present = failed = skipped_no_url = 0
+    errors: list[dict] = []
 
-    for idx, row in enumerate(tqdm(rows, desc="Downloading OpenReview PDFs")):
+    for idx, row in enumerate(tqdm(rows, desc="Downloading PDFs")):
         if processed >= args.max_papers:
             break
 
         row = dict(row)
-        candidate_urls = build_candidate_urls(row)
+        domain      = str(row.get("domain", "unknown") or "unknown")
+        pdf_dir     = get_pdf_dir(domain)
+        ensure_dir(pdf_dir)
 
-        pdf_path = ""
-        pdf_downloaded = False
-        pdf_download_error = ""
-        pdf_download_source = "openreview_pdf_url"
+        candidates      = build_candidate_urls(row)
+        pdf_path        = ""
+        pdf_downloaded  = False
+        pdf_dl_error    = ""
+        pdf_dl_source   = ""
 
-        if not candidate_urls:
+        if not candidates:
             skipped_no_url += 1
-            pdf_download_error = "missing_pdf_url"
+            pdf_dl_error    = "missing_pdf_url"
         else:
-            filename = build_safe_filename(row, idx)
-            target_pdf = PDF_DIR / filename
-            pdf_path = str(target_pdf)
+            fname      = build_safe_filename(row, idx)
+            target     = pdf_dir / fname
+            pdf_path   = str(target)
 
-            if args.only_missing and target_pdf.exists() and target_pdf.stat().st_size > 1000:
+            if args.only_missing and target.exists() and target.stat().st_size > 1000:
                 already_present += 1
-                pdf_downloaded = True
+                pdf_downloaded   = True
+                pdf_dl_source    = "already_on_disk"
             else:
-                ok, err, used_url = download_from_candidates(session, candidate_urls, target_pdf)
-                if ok and target_pdf.exists() and target_pdf.stat().st_size > 1000:
+                ok, err, used_url = download_from_candidates(session, candidates, target)
+                if ok and target.exists() and target.stat().st_size > 1000:
                     downloaded_ok += 1
-                    pdf_downloaded = True
-                    pdf_download_source = used_url
+                    pdf_downloaded  = True
+                    pdf_dl_source   = used_url
                 else:
-                    failed += 1
-                    pdf_download_error = err or "download_failed"
-                    if target_pdf.exists():
-                        try:
-                            target_pdf.unlink()
-                        except Exception:
-                            pass
+                    failed       += 1
+                    pdf_dl_error  = err or "download_failed"
+                    target.unlink(missing_ok=True)
                     pdf_path = ""
-                    errors.append(
-                        {
-                            "paper_uid": row.get("paper_uid", ""),
-                            "openreview_id": row.get("openreview_id", ""),
-                            "forum_id": row.get("forum_id", ""),
-                            "candidate_urls": candidate_urls,
-                            "error": pdf_download_error,
-                        }
-                    )
+                    errors.append({
+                        "paper_uid":      row.get("paper_uid", ""),
+                        "domain":         domain,
+                        "candidate_urls": candidates,
+                        "error":          pdf_dl_error,
+                    })
 
                 time.sleep(max(0.0, args.sleep_seconds))
 
-        row["pdf_path"] = pdf_path
-        row["pdf_downloaded"] = pdf_downloaded
-        row["pdf_download_source"] = pdf_download_source
-        row["pdf_download_error"] = pdf_download_error
+        row["pdf_path"]            = pdf_path
+        row["pdf_downloaded"]      = pdf_downloaded
+        row["pdf_download_source"] = pdf_dl_source
+        row["pdf_download_error"]  = pdf_dl_error
+        row["schema_version"]      = PIPELINE_SCHEMA_VERSION
 
         updated.append(row)
         processed += 1
@@ -256,27 +277,28 @@ def main():
     write_jsonl(OUT_FILE, updated)
 
     report = {
-        "mode": "openreview_direct_pdf_download",
-        "input_rows_total": len(rows),
-        "processed_rows": len(updated),
+        "schema_version":       PIPELINE_SCHEMA_VERSION,
+        "input_file":           str(in_file),
+        "input_rows_total":     len(rows),
+        "processed_rows":       len(updated),
         "max_papers_requested": args.max_papers,
-        "downloaded_ok": downloaded_ok,
-        "already_present": already_present,
-        "failed": failed,
-        "missing_pdf_url": skipped_no_url,
-        "output_file": str(OUT_FILE),
-        "pdf_dir": str(PDF_DIR),
-        "sample_errors": errors[:50],
+        "downloaded_ok":        downloaded_ok,
+        "already_present":      already_present,
+        "failed":               failed,
+        "missing_pdf_url":      skipped_no_url,
+        "output_file":          str(OUT_FILE),
+        "pdf_base_dir":         str(PDF_BASE_DIR),
+        "sample_errors":        errors[:50],
     }
-    REPORT_FILE.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    write_json(REPORT_FILE, report)
 
-    print(f"✅ Metadata with PDF paths saved to: {OUT_FILE}")
-    print(f"✅ PDF download report saved to: {REPORT_FILE}")
-    print(f"✅ Processed rows: {len(updated)}")
-    print(f"✅ Downloaded OK: {downloaded_ok}")
-    print(f"✅ Already present: {already_present}")
-    print(f"✅ Failed: {failed}")
-    print(f"✅ Missing pdf_url: {skipped_no_url}")
+    print(f"✅ Linked JSONL   → {OUT_FILE}")
+    print(f"✅ Report         → {REPORT_FILE}")
+    print(f"   Processed:      {len(updated)}")
+    print(f"   Downloaded OK:  {downloaded_ok}")
+    print(f"   Already exist:  {already_present}")
+    print(f"   Failed:         {failed}")
+    print(f"   No URL:         {skipped_no_url}")
 
 
 if __name__ == "__main__":

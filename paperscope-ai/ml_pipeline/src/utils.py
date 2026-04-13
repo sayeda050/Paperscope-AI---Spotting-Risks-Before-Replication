@@ -1,11 +1,16 @@
-
 from __future__ import annotations
 
 import json
 import math
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+
+# ---------------------------------------------------------------------------
+# Schema / pipeline versioning
+# ---------------------------------------------------------------------------
+PIPELINE_SCHEMA_VERSION = "2.0"   # bump whenever ATTRIBUTE_ORDER changes
 
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 WS_RE = re.compile(r"\s+")
@@ -13,6 +18,9 @@ SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9(\[])")
 PAGE_NUMBER_RE = re.compile(r"^\s*\d{1,4}\s*$")
 
 
+# ---------------------------------------------------------------------------
+# I/O helpers
+# ---------------------------------------------------------------------------
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
@@ -22,7 +30,7 @@ def write_json(path: Path, payload: Any, indent: int = 2) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=indent), encoding="utf-8")
 
 
-def safe_read_json(path: Path, default: Any):
+def safe_read_json(path: Path, default: Any) -> Any:
     if not path.exists():
         return default
     try:
@@ -47,10 +55,56 @@ def read_jsonl(path: Path) -> list[dict]:
             line = line.strip()
             if not line:
                 continue
-            rows.append(json.loads(line))
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
     return rows
 
 
+# ---------------------------------------------------------------------------
+# Run / model versioning
+# ---------------------------------------------------------------------------
+def get_run_id() -> str:
+    """Return a timestamp-based run ID: YYYYMMDD_HHMMSS."""
+    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+
+
+def write_latest_pointer(models_base: Path, domain: str, run_id: str, model_dir: Path) -> None:
+    """Write/update outputs/models/{domain}/latest.json."""
+    latest_path = models_base / domain / "latest.json"
+    ensure_dir(latest_path.parent)
+    payload = {
+        "domain": domain,
+        "run_id": run_id,
+        "model_dir": str(model_dir),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    write_json(latest_path, payload)
+
+
+def read_latest_model_dir(models_base: Path, domain: str) -> Path:
+    """Return the model directory for the latest run of a domain."""
+    latest_path = models_base / domain / "latest.json"
+    if not latest_path.exists():
+        raise FileNotFoundError(
+            f"No trained model found for domain {domain!r}. "
+            f"Expected latest.json at: {latest_path}\n"
+            f"Run: python train_tfidf_logreg.py --domain {domain}"
+        )
+    data = json.loads(latest_path.read_text(encoding="utf-8"))
+    model_dir = Path(data["model_dir"])
+    if not model_dir.exists():
+        raise FileNotFoundError(
+            f"Latest model directory does not exist: {model_dir}\n"
+            f"Re-train with: python train_tfidf_logreg.py --domain {domain}"
+        )
+    return model_dir
+
+
+# ---------------------------------------------------------------------------
+# Text cleaning
+# ---------------------------------------------------------------------------
 def clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
@@ -105,19 +159,9 @@ def sentence_split(text: str, max_sentences: int | None = None) -> list[str]:
     return parts
 
 
-def normalize_boolish_state(value: Any) -> str:
-    value = str(value or "").strip().upper()
-    mapping = {
-        "YES": "YES",
-        "NO": "NO",
-        "PARTIAL": "PARTIAL",
-        "SUPPORTED": "YES",
-        "NOT_FOUND": "NO",
-        "MISSING": "NO",
-    }
-    return mapping.get(value, value)
-
-
+# ---------------------------------------------------------------------------
+# Label helpers
+# ---------------------------------------------------------------------------
 def risk_label_from_score(score: float) -> str:
     score = float(score)
     if score < 35.0:
@@ -127,7 +171,11 @@ def risk_label_from_score(score: float) -> str:
     return "HIGH"
 
 
-def repro_label_from_score(score: float, yes_threshold: float = 70.0, no_threshold: float = 30.0) -> str | None:
+def repro_label_from_score(
+    score: float,
+    yes_threshold: float = 70.0,
+    no_threshold: float = 30.0,
+) -> str | None:
     score = float(score)
     if score >= yes_threshold:
         return "YES"
@@ -136,7 +184,74 @@ def repro_label_from_score(score: float, yes_threshold: float = 70.0, no_thresho
     return None
 
 
-def unwrap_openreview_value(v):
+def normalize_boolish_state(value: Any) -> str:
+    value = str(value or "").strip().upper()
+    mapping = {
+        "YES": "YES", "NO": "NO", "PARTIAL": "PARTIAL",
+        "SUPPORTED": "YES", "NOT_FOUND": "NO", "MISSING": "NO",
+    }
+    return mapping.get(value, value)
+
+
+# ---------------------------------------------------------------------------
+# Pattern matching utilities
+# ---------------------------------------------------------------------------
+def find_pattern_snippets(
+    text: str,
+    patterns: Iterable[re.Pattern],
+    *,
+    max_snippets: int = 3,
+    max_chars: int = 220,
+) -> list[str]:
+    text = clean_multiline_text(text)
+    if not text:
+        return []
+    snippets: list[str] = []
+    for sentence in sentence_split(text, max_sentences=800):
+        matched = any(pattern.search(sentence) for pattern in patterns)
+        if matched:
+            s = clean_text(sentence)
+            if len(s) > max_chars:
+                s = s[: max_chars - 3].rstrip() + "..."
+            if s not in snippets:
+                snippets.append(s)
+            if len(snippets) >= max_snippets:
+                break
+    return snippets
+
+
+def count_pattern_hits(
+    text: str,
+    patterns: Iterable[re.Pattern],
+    max_hits: int = 100,
+) -> int:
+    text = clean_multiline_text(text)
+    if not text:
+        return 0
+    hits = 0
+    for sentence in sentence_split(text, max_sentences=1200):
+        if any(p.search(sentence) for p in patterns):
+            hits += 1
+            if hits >= max_hits:
+                break
+    return hits
+
+
+def ngrams_present(text: str, patterns: Iterable[re.Pattern]) -> set[str]:
+    text = clean_multiline_text(text)
+    found: set[str] = set()
+    for pattern in patterns:
+        for m in pattern.finditer(text):
+            grp = clean_text(m.group(0))
+            if grp:
+                found.add(grp.lower())
+    return found
+
+
+# ---------------------------------------------------------------------------
+# OpenReview helpers
+# ---------------------------------------------------------------------------
+def unwrap_openreview_value(v: Any) -> Any:
     if isinstance(v, dict) and "value" in v:
         return unwrap_openreview_value(v["value"])
     if isinstance(v, list):
@@ -151,7 +266,7 @@ def unwrap_openreview_value(v):
     return v
 
 
-def get_openreview_content_value(content: dict, key: str, default=""):
+def get_openreview_content_value(content: dict, key: str, default: str = "") -> str:
     if not isinstance(content, dict):
         return default
     if key not in content:
@@ -179,11 +294,19 @@ def flatten_openreview_content(content: dict) -> str:
     return clean_text(" ".join(pieces))
 
 
-_ARXIV_NEW = re.compile(r"(?:arxiv\.org/(?:abs|pdf)/)?(?P<id>\d{4}\.\d{4,5})(?:v\d+)?(?:\.pdf)?", re.I)
-_ARXIV_OLD = re.compile(r"(?:arxiv\.org/(?:abs|pdf)/)?(?P<id>[a-z\-]+(?:\.[A-Z]{2})?/\d{7})(?:v\d+)?(?:\.pdf)?", re.I)
+# ---------------------------------------------------------------------------
+# arXiv helpers
+# ---------------------------------------------------------------------------
+_ARXIV_NEW = re.compile(
+    r"(?:arxiv\.org/(?:abs|pdf)/)?(?P<id>\d{4}\.\d{4,5})(?:v\d+)?(?:\.pdf)?", re.I
+)
+_ARXIV_OLD = re.compile(
+    r"(?:arxiv\.org/(?:abs|pdf)/)?(?P<id>[a-z\-]+(?:\.[A-Z]{2})?/\d{7})(?:v\d+)?(?:\.pdf)?",
+    re.I,
+)
 
 
-def extract_arxiv_id(text: str):
+def extract_arxiv_id(text: str) -> str:
     text = str(text or "")
     m = _ARXIV_NEW.search(text)
     if m:
@@ -194,9 +317,12 @@ def extract_arxiv_id(text: str):
     return ""
 
 
+# ---------------------------------------------------------------------------
+# Misc
+# ---------------------------------------------------------------------------
 def dedupe_keep_order(items: Iterable[str]) -> list[str]:
-    seen = set()
-    out = []
+    seen: set[str] = set()
+    out: list[str] = []
     for item in items:
         item = str(item or "").strip()
         if not item or item in seen:
@@ -204,59 +330,6 @@ def dedupe_keep_order(items: Iterable[str]) -> list[str]:
         seen.add(item)
         out.append(item)
     return out
-
-
-def find_pattern_snippets(
-    text: str,
-    patterns: Iterable[re.Pattern],
-    *,
-    max_snippets: int = 3,
-    max_chars: int = 220,
-) -> list[str]:
-    text = clean_multiline_text(text)
-    if not text:
-        return []
-    snippets: list[str] = []
-    for sentence in sentence_split(text, max_sentences=800):
-        low = sentence.lower()
-        matched = False
-        for pattern in patterns:
-            if pattern.search(sentence):
-                matched = True
-                break
-        if matched:
-            s = clean_text(sentence)
-            if len(s) > max_chars:
-                s = s[: max_chars - 3].rstrip() + "..."
-            if s not in snippets:
-                snippets.append(s)
-            if len(snippets) >= max_snippets:
-                break
-    return snippets
-
-
-def count_pattern_hits(text: str, patterns: Iterable[re.Pattern], max_hits: int = 100) -> int:
-    text = clean_multiline_text(text)
-    if not text:
-        return 0
-    hits = 0
-    for sentence in sentence_split(text, max_sentences=1200):
-        if any(p.search(sentence) for p in patterns):
-            hits += 1
-            if hits >= max_hits:
-                break
-    return hits
-
-
-def ngrams_present(text: str, patterns: Iterable[re.Pattern]) -> set[str]:
-    text = clean_multiline_text(text)
-    found: set[str] = set()
-    for pattern in patterns:
-        for m in pattern.finditer(text):
-            grp = clean_text(m.group(0))
-            if grp:
-                found.add(grp.lower())
-    return found
 
 
 def maybe_float(value: Any, default: float = 0.0) -> float:

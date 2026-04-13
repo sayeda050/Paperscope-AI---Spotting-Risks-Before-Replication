@@ -1,12 +1,15 @@
 {
   "input_rows": 1000,
-  "kept_rows": 1000,
-  "dropped_missing_pdf": 0,
-  "dropped_short_raw_text": 0,
+  "kept_rows": 994,
   "duplicate_paper_uid_dropped": 0,
+  "missing_pdf_path": 4,
   "pymupdf_success": 996,
-  "pdfplumber_fallback_success": 0,
+  "pdfplumber_success": 0,
   "pdf_extract_failed": 0,
-  "rows_with_review_text": 989,
-  "rows_with_decision_text": 757
+  "dropped_short_raw_text": 6,
+  "rows_with_review_text": 987,
+  "rows_with_decision_text": 757,
+  "title_filled_from_pdf": 0,
+  "abstract_filled_from_pdf": 0,
+  "keywords_filled_from_pdf": 0
 }

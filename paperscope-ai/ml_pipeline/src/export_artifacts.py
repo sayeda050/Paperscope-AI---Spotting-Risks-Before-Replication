@@ -1,93 +1,150 @@
-from pathlib import Path
-import shutil
-import json
+"""
+export_artifacts.py — Export the latest trained model for a domain to backend/ml_assets.
+
+Reads from outputs/models/{domain}/latest.json, copies all artifacts,
+and updates backend/ml_assets/registry.json.
+"""
+from __future__ import annotations
+
 import argparse
+import json
+import shutil
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
+
+SRC_DIR = Path(__file__).resolve().parent
+if str(SRC_DIR) not in sys.path:
+    sys.path.append(str(SRC_DIR))
+
+from domain_config import SUPPORTED_DOMAINS, validate_domain
+from utils import ensure_dir, read_latest_model_dir, write_json, PIPELINE_SCHEMA_VERSION
+
+PIPELINE_DIR = SRC_DIR.parent
+BACKEND_DIR  = PIPELINE_DIR.parent / "backend"
+ML_ASSETS    = BACKEND_DIR / "ml_assets"
+MODELS_OUT   = ML_ASSETS / "models"
+REGISTRY     = ML_ASSETS / "registry.json"
+
+REQUIRED_FILES = [
+    "classifier.joblib",
+    "label_encoder.joblib",
+    "metadata.json",
+    "train_report.json",
+]
+OPTIONAL_FILES = [
+    "vectorizer.joblib",
+    "feature_coefficients.csv",
+    "score_calibrator.joblib",
+    "score_feature_columns.json",
+    "score_calibrator_report.json",
+    "confusion_matrix_test.csv",
+]
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-BACKEND_DIR = BASE_DIR.parent / "backend"
-ML_ASSETS_DIR = BACKEND_DIR / "ml_assets"
-MODELS_DIR = ML_ASSETS_DIR / "models"
-REGISTRY_PATH = ML_ASSETS_DIR / "registry.json"
+def load_registry() -> dict:
+    if REGISTRY.exists():
+        try:
+            return json.loads(REGISTRY.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {"models": [], "domains": {}}
 
 
-def safe_read_json(path: Path, default):
-    if not path.exists():
-        return default
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return default
-
-
-def write_json(path: Path, payload):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Export a trained model directory into backend/ml_assets.")
-    parser.add_argument("--model-name", default="tfidf_logreg_auto_v2")
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Export the latest trained model artifacts to backend/ml_assets."
+    )
+    parser.add_argument(
+        "--domain", required=True,
+        choices=SUPPORTED_DOMAINS + ["all"],
+        help="Domain whose latest model to export.",
+    )
+    parser.add_argument(
+        "--model-name", default="",
+        help="Override model directory name in ml_assets (default: auto-named).",
+    )
     args = parser.parse_args()
 
-    src_model_dir = BASE_DIR / "outputs" / "models" / args.model_name
-    dest_model_dir = MODELS_DIR / args.model_name
+    domain_tag = validate_domain(args.domain) if args.domain != "all" else "all"
 
-    if not src_model_dir.exists():
-        raise FileNotFoundError(f"Source model directory not found: {src_model_dir}")
+    try:
+        src_dir = read_latest_model_dir(PIPELINE_DIR / "outputs" / "models", domain_tag)
+    except FileNotFoundError as e:
+        print(f"❌ {e}")
+        sys.exit(1)
 
-    dest_model_dir.mkdir(parents=True, exist_ok=True)
-    ML_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+    # Read run_id from metadata
+    run_id = "unknown"
+    meta_path = src_dir / "metadata.json"
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            run_id = meta.get("run_id", src_dir.name)
+        except Exception:
+            run_id = src_dir.name
 
-    required_files = [
-        "classifier.joblib",
-        "label_encoder.joblib",
-        "metadata.json",
-        "train_report.json",
-    ]
-    optional_files = [
-        "vectorizer.joblib",
-        "feature_coefficients.csv",
-        "feature_columns.json",
-        "score_calibrator.joblib",
-        "score_feature_columns.json",
-        "score_calibrator_report.json",
-    ]
+    model_name = args.model_name or f"tfidf_logreg_{domain_tag}_{run_id}"
+    dest_dir   = MODELS_OUT / model_name
+    ensure_dir(dest_dir)
+    ensure_dir(ML_ASSETS)
 
-    for fname in required_files:
-        src_file = src_model_dir / fname
+    # Copy required files
+    for fname in REQUIRED_FILES:
+        src_file = src_dir / fname
         if not src_file.exists():
-            raise FileNotFoundError(f"Missing required source file: {src_file}")
-        shutil.copy2(src_file, dest_model_dir / fname)
+            raise FileNotFoundError(
+                f"Required artifact missing: {src_file}\n"
+                f"Re-train with: python train_tfidf_logreg.py --domain {domain_tag}"
+            )
+        shutil.copy2(src_file, dest_dir / fname)
+        print(f"  ✅ {fname}")
 
-    for fname in optional_files:
-        src_file = src_model_dir / fname
+    # Copy optional files
+    for fname in OPTIONAL_FILES:
+        src_file = src_dir / fname
         if src_file.exists():
-            shutil.copy2(src_file, dest_model_dir / fname)
+            shutil.copy2(src_file, dest_dir / fname)
+            print(f"  📋 {fname} (optional)")
 
-    registry = safe_read_json(REGISTRY_PATH, {})
-    models = registry.get("models", [])
-    if not isinstance(models, list):
-        models = []
+    # Update registry.json
+    registry = load_registry()
+    models: list[dict] = registry.get("models", [])
+    domains: dict       = registry.get("domains", {})
 
-    active_id = registry.get("activeModelId") or registry.get("active_model") or args.model_name
-    known_ids = {m.get("id") for m in models if isinstance(m, dict)}
-    if args.model_name not in known_ids:
-        models.append({"id": args.model_name})
+    # Update or add this model
+    existing_ids = {m.get("id") for m in models}
+    if model_name not in existing_ids:
+        models.append({
+            "id":         model_name,
+            "domain":     domain_tag,
+            "run_id":     run_id,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+        })
 
-    payload = {
-        "active_model": active_id,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "available_models": sorted({args.model_name, *[m.get("id") for m in models if isinstance(m, dict) and m.get("id")]}),
-        "model_path": str(MODELS_DIR / active_id) if active_id else "",
-        "activeModelId": active_id,
-        "models": models,
+    # Set as active model for this domain
+    domains[domain_tag] = {
+        "active_model_id": model_name,
+        "model_path":      str(dest_dir),
     }
-    write_json(REGISTRY_PATH, payload)
 
-    print(f"✅ Exported model files to: {dest_model_dir}")
-    print(f"✅ Registry updated at: {REGISTRY_PATH}")
+    registry_payload = {
+        "schema_version": PIPELINE_SCHEMA_VERSION,
+        "updated_at":     datetime.now(timezone.utc).isoformat(),
+        "models":         models,
+        "domains":        domains,
+        # Legacy fields for backward compatibility
+        "active_model":   model_name,
+        "activeModelId":  model_name,
+        "model_path":     str(dest_dir),
+    }
+    write_json(REGISTRY, registry_payload)
+
+    print(f"\n✅ Exported {domain_tag} model → {dest_dir}")
+    print(f"✅ Registry updated → {REGISTRY}")
+    print(f"   Model name:  {model_name}")
+    print(f"   Domain:      {domain_tag}")
+    print(f"   Run ID:      {run_id}")
 
 
 if __name__ == "__main__":

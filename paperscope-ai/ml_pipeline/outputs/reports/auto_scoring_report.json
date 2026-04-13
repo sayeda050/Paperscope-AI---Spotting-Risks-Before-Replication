@@ -1,10 +1,18 @@
 {
-  "rows_scored": 999,
-  "feature_count": 26,
-  "score_min": 0.0,
-  "score_max": 1.0,
-  "score_mean": 0.5612642946452524,
-  "scoring_method": "paper_content_checklist_weights_plus_small_svd",
+  "schema_version": "2.0",
+  "rows_scored": 994,
+  "feature_count": 13,
+  "avg_reproducibility_score": 50.735915492957744,
+  "avg_risk_score": 49.264084507042256,
+  "domain_stats": {
+    "ml": {
+      "rows": 994,
+      "avg_reproducibility_score": 50.735915492957744,
+      "avg_risk_score": 49.264084507042256
+    }
+  },
   "weights_csv": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\feature_weights.csv",
-  "scored_csv": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\auto_scored_papers.csv"
+  "scored_csv": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\auto_scored_papers.csv",
+  "evidence_jsonl": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\auto_scored_papers_evidence.jsonl",
+  "scoring_method": "transparent_weighted_attribute_rubric_domain_aware_v3"
 }

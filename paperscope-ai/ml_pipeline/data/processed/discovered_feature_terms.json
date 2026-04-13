@@ -1,274 +1,43 @@
 {
-  "svd_feature_00": [
-    "arxiv",
-    "2024",
-    "review as",
-    "under review",
-    "review",
-    "al 2023",
-    "2021",
-    "dataset",
-    "conference on",
-    "pp",
-    "language",
-    "method",
-    "2020",
-    "al 2024",
-    "wang"
-  ],
-  "svd_feature_01": [
-    "published as",
-    "llms",
-    "published",
-    "llm",
-    "language models",
-    "gpt",
-    "language",
-    "large language",
-    "prompt",
-    "7b",
-    "llama",
-    "text",
-    "instruction",
-    "prompts",
-    "reasoning"
-  ],
-  "svd_feature_02": [
-    "published as",
-    "published",
-    "diffusion",
-    "diffusion models",
-    "gaussian",
-    "denoising",
-    "xt",
-    "latent",
-    "diffusion model",
-    "3d",
-    "noise",
-    "university",
-    "eq",
-    "x0",
-    "network"
-  ],
-  "svd_feature_03": [
-    "image",
-    "diffusion",
-    "images",
-    "cvf",
-    "ieee cvf",
-    "diffusion models",
-    "the ieee",
-    "computer vision",
-    "on computer",
-    "and pattern",
-    "vision",
-    "cvf conference",
-    "vision and",
-    "pattern recognition",
-    "recognition pp"
-  ],
-  "svd_feature_04": [
-    "reward",
-    "agent",
-    "policy",
-    "reinforcement learning",
-    "reinforcement",
-    "the agent",
-    "action",
-    "diffusion",
-    "actions",
-    "diffusion models",
-    "rl",
-    "environment",
-    "agents",
-    "rewards",
-    "the reward"
-  ],
-  "svd_feature_05": [
-    "agent",
-    "policy",
-    "the agent",
-    "action",
-    "environment",
-    "reinforcement learning",
-    "reinforcement",
-    "actions",
-    "rl",
-    "agents",
-    "reward",
-    "environments",
-    "the environment",
-    "node",
-    "policies"
-  ],
-  "svd_feature_06": [
-    "policy",
-    "reward",
-    "cifar",
-    "gradient",
-    "reinforcement learning",
-    "reinforcement",
-    "imagenet",
-    "attacks",
-    "cifar 10",
-    "67",
-    "sgd",
-    "attack",
-    "rl",
-    "cifar 100",
-    "\u03c0\u03b8"
-  ],
-  "svd_feature_07": [
-    "node",
-    "graph",
-    "memory",
-    "nodes",
-    "matrix",
-    "gnn",
-    "graphs",
-    "graph neural",
-    "quantization",
-    "llms",
-    "cache",
-    "gnns",
-    "matrices",
-    "kv",
-    "llm"
-  ],
-  "svd_feature_08": [
-    "transformer",
-    "quantization",
-    "rl",
-    "transformers",
-    "tokens",
-    "token",
-    "policy",
-    "reinforcement learning",
-    "reinforcement",
-    "layer",
-    "reward",
-    "layers",
-    "decoder",
-    "the policy",
-    "vaswani"
-  ],
-  "svd_feature_09": [
-    "diffusion",
-    "diffusion models",
-    "denoising",
-    "node",
-    "diffusion model",
-    "gnn",
-    "the diffusion",
-    "\u03b1t",
-    "denoising diffusion",
-    "nodes",
-    "graph",
-    "graph neural",
-    "x0",
-    "ho",
-    "of diffusion"
-  ],
-  "svd_feature_10": [
-    "splatting",
-    "gaussian splatting",
-    "nerf",
-    "radiance",
-    "3dgs",
-    "3d gaussian",
-    "rendering",
-    "attacks",
-    "radiance fields",
-    "attack",
-    "gaussians",
-    "neural radiance",
-    "3d",
-    "view synthesis",
-    "psnr"
-  ],
-  "svd_feature_11": [
-    "graph",
-    "node",
-    "graphs",
-    "nodes",
-    "gnn",
-    "the graph",
-    "gnns",
-    "edges",
-    "graph neural",
-    "of nodes",
-    "for graph",
-    "of graph",
-    "the node",
-    "gcn",
-    "of node"
-  ],
-  "svd_feature_12": [
-    "attack",
-    "attacks",
-    "jailbreak",
-    "asr",
-    "defense",
-    "harmful",
-    "defenses",
-    "benign",
-    "safety",
-    "the attack",
-    "jailbreaking",
-    "security",
-    "attack success",
-    "attacks on",
-    "vulnerabilities"
-  ],
-  "svd_feature_13": [
-    "alignment",
-    "contrastive",
-    "rlhf",
-    "dpo",
-    "human feedback",
-    "embeddings",
-    "preference",
-    "reward model",
-    "preference optimization",
-    "log",
-    "representation",
-    "\u03c0\u03b8",
-    "supervised",
-    "from human",
-    "reward"
-  ],
-  "svd_feature_14": [
-    "node",
-    "nodes",
-    "attack",
-    "graphs",
-    "gnn",
-    "graph",
-    "the graph",
-    "attacks",
-    "edges",
-    "gnns",
-    "the node",
-    "graph neural",
-    "jailbreak",
-    "of nodes",
-    "message"
-  ],
-  "svd_feature_15": [
-    "query",
-    "retrieval",
-    "rag",
-    "the query",
-    "documents",
-    "retrieved",
-    "token",
-    "latency",
-    "queries",
-    "retrieval augmented",
-    "document",
-    "tokens",
-    "augmented generation",
-    "association for",
-    "query and"
-  ]
+  "feature_terms": {
+    "code_artifact": {
+      "weight": 0.16
+    },
+    "data_artifact": {
+      "weight": 0.1
+    },
+    "availability_statement": {
+      "weight": 0.05
+    },
+    "execution_instructions": {
+      "weight": 0.1
+    },
+    "hyperparams_detail": {
+      "weight": 0.12
+    },
+    "seed_disclosed": {
+      "weight": 0.08
+    },
+    "compute_detail": {
+      "weight": 0.08
+    },
+    "software_versions": {
+      "weight": 0.08
+    },
+    "evaluation_protocol": {
+      "weight": 0.1
+    },
+    "ablation": {
+      "weight": 0.05
+    },
+    "baseline_comparison": {
+      "weight": 0.04
+    },
+    "statistical_rigor": {
+      "weight": 0.02
+    },
+    "limitations": {
+      "weight": 0.02
+    }
+  }
 }

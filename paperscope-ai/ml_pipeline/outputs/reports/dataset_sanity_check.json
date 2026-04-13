@@ -1,23 +1,101 @@
 {
-  "rows": 461,
-  "columns": 33,
-  "model_text_nonempty": 461,
-  "raw_text_nonempty": 457,
-  "duplicate_paper_uid": 0,
+  "schema_version": "2.0",
+  "rows": 614,
+  "columns": 67,
+  "missing_required_columns": [],
+  "both_classes_present": true,
   "label_counts": {
-    "YES": 255,
-    "NO": 206
+    "YES": 319,
+    "NO": 295
   },
+  "domain_counts": {
+    "ml": 614
+  },
+  "label_source_counts": {
+    "feature_consensus": 511,
+    "review_text": 99,
+    "decision_text": 4
+  },
+  "model_text_nonempty": 614,
+  "train_text_nonempty": 614,
+  "duplicate_paper_uid": 0,
   "constant_columns": [
     "source",
     "venue",
-    "year"
+    "year",
+    "pdf_downloaded",
+    "schema_version",
+    "domain",
+    "training_text_source"
   ],
-  "auto_score_min": 0.0,
-  "auto_score_max": 1.0,
-  "auto_score_mean": 0.5956590425132795,
-  "leakage_columns_present": [
-    "review_text",
-    "decision_text"
-  ]
+  "score_stats": {
+    "reproducibility_score": {
+      "min": 6.0,
+      "max": 88.0,
+      "mean": 51.26791530944625,
+      "out_of_range_count": 0
+    },
+    "risk_score": {
+      "min": 12.0,
+      "max": 94.0,
+      "mean": 48.73208469055375,
+      "out_of_range_count": 0
+    }
+  },
+  "leakage_audit": {
+    "audit_columns_present": [
+      "review_text",
+      "decision_text"
+    ],
+    "training_text_source_locked": true
+  },
+  "schema_check": {
+    "expected_version": "2.0",
+    "schema_ok": false
+  },
+  "reserved_uid_overlap": 0,
+  "split_files": {
+    "train": {
+      "exists": true,
+      "rows": 429,
+      "label_counts": {
+        "YES": 223,
+        "NO": 206
+      },
+      "has_both_classes": true,
+      "domain_counts": {
+        "ml": 429
+      },
+      "has_model_text": true,
+      "has_train_text_input": true
+    },
+    "val": {
+      "exists": true,
+      "rows": 92,
+      "label_counts": {
+        "YES": 48,
+        "NO": 44
+      },
+      "has_both_classes": true,
+      "domain_counts": {
+        "ml": 92
+      },
+      "has_model_text": true,
+      "has_train_text_input": true
+    },
+    "test": {
+      "exists": true,
+      "rows": 93,
+      "label_counts": {
+        "YES": 48,
+        "NO": 45
+      },
+      "has_both_classes": true,
+      "domain_counts": {
+        "ml": 93
+      },
+      "has_model_text": true,
+      "has_train_text_input": true
+    }
+  }
 }

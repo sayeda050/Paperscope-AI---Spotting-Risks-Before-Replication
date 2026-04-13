@@ -1,0 +1,15 @@
+{
+  "schema_version": "2.0",
+  "domain": "ml",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "batch_size": 5,
+  "sample_size": 250,
+  "this_run_labeled": 15,
+  "this_run_failed": 0,
+  "total_labeled": 250,
+  "total_pending": 0,
+  "avg_target_score": 52.728,
+  "output_file": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\gold_score_dataset.csv",
+  "failed_uids": []
+}

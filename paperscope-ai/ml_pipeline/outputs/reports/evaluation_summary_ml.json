@@ -1,0 +1,45 @@
+{
+  "schema_version": "2.0",
+  "domain": "ml",
+  "model_dir": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\ml\\20260413_142523",
+  "calibration": "isotonic",
+  "test_accuracy": 0.9247311827956989,
+  "labels": [
+    "NO",
+    "YES"
+  ],
+  "classification_report": {
+    "NO": {
+      "precision": 0.9523809523809523,
+      "recall": 0.8888888888888888,
+      "f1-score": 0.9195402298850575,
+      "support": 45.0
+    },
+    "YES": {
+      "precision": 0.9019607843137255,
+      "recall": 0.9583333333333334,
+      "f1-score": 0.9292929292929293,
+      "support": 48.0
+    },
+    "accuracy": 0.9247311827956989,
+    "macro avg": {
+      "precision": 0.927170868347339,
+      "recall": 0.9236111111111112,
+      "f1-score": 0.9244165795889934,
+      "support": 93.0
+    },
+    "weighted avg": {
+      "precision": 0.9263576398301255,
+      "recall": 0.9247311827956989,
+      "f1-score": 0.9245738811923462,
+      "support": 93.0
+    }
+  },
+  "test_rows": 93,
+  "calibration_check": {
+    "mean_predicted_yes_prob": 0.5277349702111058,
+    "actual_yes_rate": 0.5161290322580645,
+    "calibration_gap": 0.011605937953041323
+  },
+  "feature_engineering": "tfidf_bigrams_plus_attribute_features_plus_domain_onehot_v3"
+}

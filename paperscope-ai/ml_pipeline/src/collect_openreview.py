@@ -1,3 +1,10 @@
+"""
+collect_openreview.py — Collect ML/NLP papers from OpenReview API v2.
+
+Outputs: data/raw/openreview_raw.jsonl
+"""
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 
@@ -9,32 +16,32 @@ if str(SRC_DIR) not in sys.path:
     sys.path.append(str(SRC_DIR))
 
 from utils import (
-    write_jsonl,
-    ensure_dir,
+    PIPELINE_SCHEMA_VERSION,
     clean_text,
-    get_openreview_content_value,
-    flatten_openreview_content,
+    ensure_dir,
     extract_arxiv_id,
+    flatten_openreview_content,
+    get_openreview_content_value,
+    write_jsonl,
 )
 
 PIPELINE_DIR = SRC_DIR.parent
-RAW_DIR = PIPELINE_DIR / "data" / "raw"
-OUT_FILE = RAW_DIR / "openreview_raw.jsonl"
-REPORT_FILE = PIPELINE_DIR / "outputs" / "reports" / "openreview_collection_report.txt"
+RAW_DIR      = PIPELINE_DIR / "data" / "raw"
+OUT_FILE     = RAW_DIR / "openreview_raw.jsonl"
+REPORT_FILE  = PIPELINE_DIR / "outputs" / "reports" / "openreview_collection_report.txt"
 
 CLIENT = openreview.api.OpenReviewClient(baseurl="https://api2.openreview.net")
 
-VENUE_IDS = [
-    "ICLR.cc/2025/Conference",
-    "ICLR.cc/2024/Conference",
-    "NeurIPS.cc/2024/Conference",
+# Each venue maps to a domain. ICLR/NeurIPS/ICML → "ml"; ACL/EMNLP → "nlp"
+VENUE_CONFIGS = [
+    {"venue_id": "ICLR.cc/2025/Conference",   "domain": "ml"},
+    {"venue_id": "ICLR.cc/2024/Conference",   "domain": "ml"},
+    {"venue_id": "NeurIPS.cc/2024/Conference", "domain": "ml"},
 ]
 
 
-def safe_str(x):
-    if x is None:
-        return ""
-    return str(x).strip()
+def safe_str(x) -> str:
+    return "" if x is None else str(x).strip()
 
 
 def note_get(note_like, field_name, default=None):
@@ -45,114 +52,98 @@ def note_get(note_like, field_name, default=None):
     return getattr(note_like, field_name, default)
 
 
-def get_note_content(note_like):
+def get_note_content(note_like) -> dict:
     content = note_get(note_like, "content", {}) or {}
-    if isinstance(content, dict):
-        return content
-    return {}
+    return content if isinstance(content, dict) else {}
 
 
-def get_note_id(note_like):
+def get_note_id(note_like) -> str:
     return safe_str(note_get(note_like, "id", ""))
 
 
-def get_note_invitations(note_like):
-    """
-    API v2 replies often expose type information in `invitations` (list),
-    while some older patterns use `invitation` (string). Support both.
-    """
+def get_note_invitations(note_like) -> list[str]:
     invitations = note_get(note_like, "invitations", None)
     if invitations:
         if isinstance(invitations, list):
             return [safe_str(x) for x in invitations if safe_str(x)]
         return [safe_str(invitations)]
-
     invitation = safe_str(note_get(note_like, "invitation", ""))
     return [invitation] if invitation else []
 
 
 def get_submission_name(venue_id: str) -> str:
-    venue_group = CLIENT.get_group(venue_id)
-    content = getattr(venue_group, "content", {}) or {}
-    submission_name = content.get("submission_name", {})
-    if isinstance(submission_name, dict):
-        submission_name = submission_name.get("value", "")
-    submission_name = safe_str(submission_name)
-    return submission_name or "Submission"
+    try:
+        venue_group = CLIENT.get_group(venue_id)
+        content = getattr(venue_group, "content", {}) or {}
+        submission_name = content.get("submission_name", {})
+        if isinstance(submission_name, dict):
+            submission_name = submission_name.get("value", "")
+        return safe_str(submission_name) or "Submission"
+    except Exception:
+        return "Submission"
 
 
-def parse_replies(replies):
-    review_texts = []
-    decision_texts = []
+def parse_replies(replies) -> tuple[str, str]:
+    review_texts:   list[str] = []
+    decision_texts: list[str] = []
 
     for reply in replies or []:
-        content = get_note_content(reply)
+        content     = get_note_content(reply)
         invitations = get_note_invitations(reply)
-
-        text_blob = flatten_openreview_content(content)
+        text_blob   = flatten_openreview_content(content)
         if not text_blob:
             continue
 
         inv_lows = [inv.lower() for inv in invitations]
-
         is_decision = any(
-            ("decision" in inv)
-            or ("meta_review" in inv)
-            or ("metareview" in inv)
+            "decision" in inv or "meta_review" in inv or "metareview" in inv
             for inv in inv_lows
         )
-
-        is_review_like = any(
-            ("official_review" in inv)
-            or ("ethics_review" in inv)
-            or ("review" in inv and "official_review" in inv)
-            or ("public_comment" in inv)
-            or ("official_comment" in inv)
+        is_review = any(
+            "official_review" in inv or "ethics_review" in inv
+            or "public_comment" in inv or "official_comment" in inv
             or ("comment" in inv and "author" not in inv)
             for inv in inv_lows
         )
 
         if is_decision:
             decision_texts.append(text_blob)
-        elif is_review_like:
+        elif is_review:
             review_texts.append(text_blob)
 
-    return clean_text(" ".join(review_texts)), clean_text(" ".join(decision_texts))
+    return (
+        clean_text(" ".join(review_texts)),
+        clean_text(" ".join(decision_texts)),
+    )
 
 
-def fetch_forum_replies(forum_id: str, submission_id: str):
+def fetch_forum_replies(forum_id: str, submission_id: str) -> list:
     if not forum_id:
         return []
-
     try:
         replies = CLIENT.get_all_notes(forum=forum_id)
     except Exception:
         return []
-
-    cleaned = []
-    for reply in replies:
-        reply_id = get_note_id(reply)
-        if reply_id and reply_id == submission_id:
-            continue
-        cleaned.append(reply)
-
-    return cleaned
+    return [r for r in replies if get_note_id(r) != submission_id]
 
 
-def parse_submission(note, venue_id):
+def parse_submission(note, venue_id: str, domain: str) -> dict | None:
     content = get_note_content(note)
-
     note_id = get_note_id(note)
+    if not note_id:
+        return None
+
     forum_id = safe_str(note_get(note, "forum", "")) or note_id
-
-    title = get_openreview_content_value(content, "title", "")
+    title    = get_openreview_content_value(content, "title", "")
     abstract = get_openreview_content_value(content, "abstract", "")
-    keywords = get_openreview_content_value(content, "keywords", "")
-    pdf_url = safe_str(note_get(note, "pdf", "")) or get_openreview_content_value(content, "pdf", "")
-    paper_url = get_openreview_content_value(content, "paper_url", "")
+    if not title or not abstract:
+        return None
 
+    keywords = get_openreview_content_value(content, "keywords", "")
+    pdf_url  = safe_str(note_get(note, "pdf", "")) or get_openreview_content_value(content, "pdf", "")
+    paper_url = get_openreview_content_value(content, "paper_url", "")
     all_content_text = flatten_openreview_content(content)
-    direct_arxiv_id = (
+    arxiv_id = (
         extract_arxiv_id(pdf_url)
         or extract_arxiv_id(paper_url)
         or extract_arxiv_id(all_content_text)
@@ -162,121 +153,105 @@ def parse_submission(note, venue_id):
     replies = []
     if isinstance(details, dict):
         replies = details.get("replies") or details.get("directReplies") or []
-
     if not replies:
         replies = fetch_forum_replies(forum_id=forum_id, submission_id=note_id)
 
     review_text, decision_text = parse_replies(replies)
 
     return {
-        "paper_uid": f"or_{note_id}",
-        "source": "openreview",
-        "venue": venue_id,
-        "year": safe_str(venue_id).split("/")[1] if "/" in venue_id else "",
-        "openreview_id": note_id,
-        "forum_id": forum_id,
-        "title": title,
-        "abstract": abstract,
-        "keywords": keywords,
-        "pdf_url": pdf_url,
-        "paper_url": paper_url,
-        "direct_arxiv_id": direct_arxiv_id,
-        "decision_text": decision_text,
-        "review_text": review_text,
-        "review_count": len(replies),
-        "raw_invitations": get_note_invitations(note),
+        "schema_version":   PIPELINE_SCHEMA_VERSION,
+        "paper_uid":        f"or_{note_id}",
+        "source":           "openreview",
+        "domain":           domain,
+        "venue":            venue_id,
+        "year":             venue_id.split("/")[1] if "/" in venue_id else "",
+        "openreview_id":    note_id,
+        "forum_id":         forum_id,
+        "title":            title,
+        "abstract":         abstract,
+        "keywords":         keywords,
+        "pdf_url":          pdf_url,
+        "paper_url":        paper_url,
+        "direct_arxiv_id":  arxiv_id,
+        "decision_text":    decision_text,
+        "review_text":      review_text,
+        "review_count":     len(replies),
+        "raw_invitations":  get_note_invitations(note),
     }
 
 
-def fetch_submissions_for_venue(venue_id):
-    """
-    API v2 canonical path:
-    1) read venue group
-    2) get submission_name
-    3) query exactly that invitation with details='replies'
-
-    Do NOT query multiple invitation variants here, because that can
-    inflate the row count with extra note types.
-    """
+def fetch_submissions_for_venue(venue_id: str) -> list:
     submission_name = get_submission_name(venue_id)
-    invitation_id = f"{venue_id}/-/{submission_name}"
-
-    notes = CLIENT.get_all_notes(
-        invitation=invitation_id,
-        details="replies",
-    )
-
-    seen = set()
-    unique_notes = []
-
+    invitation_id   = f"{venue_id}/-/{submission_name}"
+    notes = CLIENT.get_all_notes(invitation=invitation_id, details="replies")
+    seen: set[str] = set()
+    unique: list   = []
     for note in notes:
-        note_id = get_note_id(note)
-        if not note_id or note_id in seen:
-            continue
-        seen.add(note_id)
-        unique_notes.append(note)
-
-    return unique_notes
+        nid = get_note_id(note)
+        if nid and nid not in seen:
+            seen.add(nid)
+            unique.append(note)
+    return unique
 
 
-def main():
+def main() -> None:
     ensure_dir(RAW_DIR)
     ensure_dir(REPORT_FILE.parent)
 
-    all_rows = []
-    report_lines = []
+    all_rows:    list[dict] = []
+    report_lines: list[str] = []
+    total_reviews   = 0
+    total_decisions = 0
 
-    total_with_reviews = 0
-    total_with_decisions = 0
-
-    for venue_id in VENUE_IDS:
+    for config in VENUE_CONFIGS:
+        venue_id = config["venue_id"]
+        domain   = config["domain"]
         try:
             submissions = fetch_submissions_for_venue(venue_id)
         except Exception as e:
             report_lines.append(f"{venue_id} | ERROR | {e}")
             continue
 
-        venue_rows = []
-        venue_with_reviews = 0
-        venue_with_decisions = 0
+        venue_rows      = []
+        venue_reviews   = 0
+        venue_decisions = 0
 
         for note in tqdm(submissions, desc=f"Collect {venue_id}"):
             try:
-                row = parse_submission(note, venue_id)
-                if row["title"] and row["abstract"]:
+                row = parse_submission(note, venue_id, domain)
+                if row is not None:
                     venue_rows.append(row)
                     if row["review_text"]:
-                        venue_with_reviews += 1
+                        venue_reviews += 1
                     if row["decision_text"]:
-                        venue_with_decisions += 1
+                        venue_decisions += 1
             except Exception as e:
                 report_lines.append(
                     f"{venue_id} | parse_error | note_id={get_note_id(note)} | {e}"
                 )
 
         all_rows.extend(venue_rows)
-        total_with_reviews += venue_with_reviews
-        total_with_decisions += venue_with_decisions
-
+        total_reviews   += venue_reviews
+        total_decisions += venue_decisions
         report_lines.append(
-            f"{venue_id} | submissions_found={len(submissions)} | kept={len(venue_rows)} "
-            f"| with_review_text={venue_with_reviews} | with_decision_text={venue_with_decisions}"
+            f"{venue_id} | domain={domain} | kept={len(venue_rows)} "
+            f"| with_review_text={venue_reviews} | with_decision_text={venue_decisions}"
         )
 
     write_jsonl(OUT_FILE, all_rows)
-
-    report_lines.append("")
-    report_lines.append(f"Total collected rows: {len(all_rows)}")
-    report_lines.append(f"Rows with non-empty review_text: {total_with_reviews}")
-    report_lines.append(f"Rows with non-empty decision_text: {total_with_decisions}")
-
+    report_lines += [
+        "",
+        f"Total rows: {len(all_rows)}",
+        f"With review_text:   {total_reviews}",
+        f"With decision_text: {total_decisions}",
+    ]
     REPORT_FILE.write_text("\n".join(report_lines), encoding="utf-8")
 
-    print(f"✅ OpenReview raw data saved to: {OUT_FILE}")
-    print(f"✅ Collection report saved to: {REPORT_FILE}")
-    print(f"✅ Total rows: {len(all_rows)}")
-    print(f"✅ Rows with review_text: {total_with_reviews}")
-    print(f"✅ Rows with decision_text: {total_with_decisions}")
+    print(f"✅ OpenReview data → {OUT_FILE}")
+    print(f"✅ Report          → {REPORT_FILE}")
+    print(f"✅ Total rows:      {len(all_rows)}")
+    print(f"   With reviews:    {total_reviews}")
+    print(f"   With decisions:  {total_decisions}")
 
 
 if __name__ == "__main__":

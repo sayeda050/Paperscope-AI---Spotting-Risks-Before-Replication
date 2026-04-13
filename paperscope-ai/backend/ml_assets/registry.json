@@ -1,14 +1,24 @@
 {
-  "active_model": "tfidf_logreg_auto_v2",
-  "updated_at": "2026-04-12T06:23:33.685095+00:00",
-  "available_models": [
-    "tfidf_logreg_auto_v2"
-  ],
-  "model_path": "C:\\Users\\Admin\\Downloads\\PaperScope AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_auto_v2",
-  "activeModelId": "tfidf_logreg_auto_v2",
+  "schema_version": "2.0",
+  "updated_at": "2026-04-13T14:29:35.780733+00:00",
   "models": [
     {
       "id": "tfidf_logreg_auto_v2"
+    },
+    {
+      "id": "tfidf_logreg_ml_20260413_142523",
+      "domain": "ml",
+      "run_id": "20260413_142523",
+      "exported_at": "2026-04-13T14:29:35.780703+00:00"
     }
-  ]
+  ],
+  "domains": {
+    "ml": {
+      "active_model_id": "tfidf_logreg_ml_20260413_142523",
+      "model_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_ml_20260413_142523"
+    }
+  },
+  "active_model": "tfidf_logreg_ml_20260413_142523",
+  "activeModelId": "tfidf_logreg_ml_20260413_142523",
+  "model_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_ml_20260413_142523"
 }

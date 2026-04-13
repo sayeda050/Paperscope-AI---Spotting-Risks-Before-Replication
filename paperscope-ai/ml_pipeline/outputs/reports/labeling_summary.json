@@ -1,23 +1,35 @@
 {
-  "input_rows": 999,
-  "rows_labeled": 461,
-  "dropped_ambiguous": 538,
-  "labeled_from_reviewer_text": 130,
-  "labeled_from_decision_text": 13,
-  "labeled_from_score_fallback": 318,
+  "schema_version": "2.0",
+  "input_rows": 994,
+  "rows_labeled": 614,
+  "domain_filter": "all",
+  "dropped_ambiguous": 380,
+  "dropped_below_confidence": 0,
+  "labeled_from_reviewer_text": 99,
+  "labeled_from_decision_text": 4,
+  "labeled_from_llm": 0,
+  "labeled_from_feature_fallback": 511,
+  "llm_calls_made": 0,
   "label_counts": {
-    "YES": 255,
-    "NO": 206
+    "YES": 319,
+    "NO": 295
   },
   "label_source_counts": {
-    "score_fallback": 318,
-    "review_text": 130,
-    "decision_text": 13
+    "feature_consensus": 511,
+    "review_text": 99,
+    "decision_text": 4
   },
-  "labeling_method": "repro_text_then_score_fallback",
-  "score_thresholds": {
-    "high": 0.7,
-    "low": 0.3
+  "domain_label_counts": {
+    "ml": {
+      "YES": 319,
+      "NO": 295
+    }
   },
-  "output_csv": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\labeled_dataset.csv"
+  "split": {
+    "train_rows": 429,
+    "val_rows": 92,
+    "test_rows": 93,
+    "stratified": true
+  },
+  "leakage_guard": "train_text_input == model_text (review/decision text EXCLUDED from training)"
 }

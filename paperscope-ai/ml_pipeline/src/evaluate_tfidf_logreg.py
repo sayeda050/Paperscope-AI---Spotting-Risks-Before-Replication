@@ -1,182 +1,210 @@
-import re
-from pathlib import Path
+"""
+evaluate_tfidf_logreg.py — Evaluate the latest trained classifier for a domain.
+
+Reads the test split (data/processed/test.csv) and the latest model for the
+specified domain via outputs/models/{domain}/latest.json.
+"""
+from __future__ import annotations
+
+import argparse
 import json
+import sys
+from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 import scipy.sparse as sp
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
+SRC_DIR = Path(__file__).resolve().parent
+if str(SRC_DIR) not in sys.path:
+    sys.path.append(str(SRC_DIR))
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data" / "processed"
-MODEL_DIR = BASE_DIR / "outputs" / "models" / "tfidf_logreg_auto_v2"
-REPORT_DIR = BASE_DIR / "outputs" / "reports"
+from domain_config import ATTRIBUTE_ORDER, SUPPORTED_DOMAINS, validate_domain
+from utils import clean_text, ensure_dir, read_latest_model_dir, write_json, PIPELINE_SCHEMA_VERSION
 
-TEST_CSV = DATA_DIR / "test.csv"
+PIPELINE_DIR  = SRC_DIR.parent
+DATA_DIR      = PIPELINE_DIR / "data" / "processed"
+MODELS_BASE   = PIPELINE_DIR / "outputs" / "models"
+REPORT_DIR    = PIPELINE_DIR / "outputs" / "reports"
+TEST_CSV      = DATA_DIR / "test.csv"
 
-VECTORIZER_PATH = MODEL_DIR / "vectorizer.joblib"
-CLASSIFIER_PATH = MODEL_DIR / "classifier.joblib"
-LABEL_ENCODER_PATH = MODEL_DIR / "label_encoder.joblib"
-METADATA_PATH = MODEL_DIR / "metadata.json"
-
-EVAL_TXT_PATH = REPORT_DIR / "evaluation.txt"
-CONF_MATRIX_PATH = REPORT_DIR / "confusion_matrix.csv"
-EVAL_JSON_PATH = REPORT_DIR / "evaluation_summary.json"
-
-
-# Must match train_tfidf_logreg.py
-KEYWORD_FLAGS = {
-    "kw_code_link": re.compile(
-        r"github\.com/|gitlab\.com/|code\s+available|we\s+release\s+(?:the\s+)?code|open[- ]?source",
-        re.I,
-    ),
-    "kw_data_link": re.compile(
-        r"dataset\s+available|we\s+release\s+(?:the\s+)?data|huggingface\.co/|zenodo\.org/",
-        re.I,
-    ),
-    "kw_hyperparams": re.compile(
-        r"learning\s+rate|batch\s+size|epochs?|weight\s+decay|dropout|hyperparameter",
-        re.I,
-    ),
-    "kw_seed": re.compile(
-        r"random\s+seed|seed\s*=\s*\d+|seeded",
-        re.I,
-    ),
-    "kw_uncertainty": re.compile(
-        r"standard\s+deviation|confidence\s+interval|error\s+bar|±|\u00b1|p[- ]value",
-        re.I,
-    ),
-    "kw_compute": re.compile(
-        r"\bgpu\b|v100|a100|cuda|training\s+time|compute\s+(?:budget|hours?)",
-        re.I,
-    ),
-    "kw_ablation": re.compile(
-        r"ablation\s+stud(?:y|ies)|we\s+ablate",
-        re.I,
-    ),
-    "kw_baselines": re.compile(
-        r"baseline|compared\s+(?:with|to|against)|state[- ]of[- ]the[- ]art|sota",
-        re.I,
-    ),
-    "kw_limitations": re.compile(
-        r"limitations?|threats\s+to\s+validity|future\s+work|bias",
-        re.I,
-    ),
-    "kw_stat_tests": re.compile(
-        r"wilcoxon|t-test|anova|bootstrap|significance|confidence\s+interval",
-        re.I,
-    ),
-}
+EXPLICIT_FEATURE_COLUMNS = ATTRIBUTE_ORDER
+TEXT_COLUMN_CANDIDATES   = ["train_text_input", "model_text"]
 
 
-def load_metadata():
-    if not METADATA_PATH.exists():
-        return {}
-    try:
-        return json.loads(METADATA_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-
-def extract_keyword_flags(texts: list[str]):
-    n = len(texts)
-    k = len(KEYWORD_FLAGS)
-    import numpy as np
-    X = np.zeros((n, k), dtype=float)
-
-    for j, pattern in enumerate(KEYWORD_FLAGS.values()):
-        for i, text in enumerate(texts):
-            X[i, j] = 1.0 if pattern.search(text or "") else 0.0
-
-    return X
-
-
-def build_features(vectorizer: TfidfVectorizer, texts: list[str], metadata: dict):
-    X_tfidf = vectorizer.transform(texts)
-
-    feature_engineering = str(metadata.get("feature_engineering", "")).lower()
-    keyword_flag_names = metadata.get("keyword_flag_names") or []
-
-    uses_keyword_flags = ("keyword" in feature_engineering) or bool(keyword_flag_names)
-    if not uses_keyword_flags:
-        return X_tfidf
-
-    X_kw = extract_keyword_flags(texts)
-    return sp.hstack([X_tfidf, sp.csr_matrix(X_kw)], format="csr")
-
-
-def load_test_data():
+def load_test_data(domain_filter: str) -> pd.DataFrame:
     if not TEST_CSV.exists():
-        raise FileNotFoundError(f"Missing file: {TEST_CSV}")
-
+        raise FileNotFoundError(
+            f"Missing test split: {TEST_CSV}\n"
+            "Run build_labeled_dataset_auto.py first."
+        )
     df = pd.read_csv(TEST_CSV)
-    required_cols = {"model_text", "repro_label"}
-    missing = required_cols - set(df.columns)
-    if missing:
-        raise ValueError(f"{TEST_CSV.name} is missing columns: {sorted(missing)}")
+    if "repro_label" not in df.columns:
+        raise ValueError("test.csv missing 'repro_label' column.")
+
+    text_col = next((c for c in TEXT_COLUMN_CANDIDATES if c in df.columns), None)
+    if text_col is None:
+        raise ValueError(f"test.csv: no text column. Expected one of {TEXT_COLUMN_CANDIDATES}")
 
     df = df.copy()
-    df["model_text"] = df["model_text"].fillna("").astype(str)
-    df["repro_label"] = df["repro_label"].fillna("").astype(str)
-    df = df[df["model_text"].str.len() > 0]
-    df = df[df["repro_label"].str.len() > 0]
+    df[text_col]       = df[text_col].fillna("").astype(str).map(clean_text)
+    df["repro_label"]  = df["repro_label"].fillna("").astype(str)
+
+    if domain_filter and "domain" in df.columns:
+        df = df[df["domain"] == domain_filter].copy()
+
+    df = df[df[text_col].str.len() > 0]
+    df = df[df["repro_label"].isin(["YES", "NO"])].copy()
+
+    for col in EXPLICIT_FEATURE_COLUMNS:
+        if col not in df.columns:
+            df[col] = 0.0
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).astype(float)
 
     if df.empty:
-        raise ValueError("Test set is empty after cleaning.")
-    return df
+        raise ValueError(f"Test set is empty after filtering (domain={domain_filter!r}).")
+
+    df["text_column_used"] = text_col
+    return df.reset_index(drop=True)
 
 
-def main():
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+def get_domain_onehot(df: pd.DataFrame) -> sp.csr_matrix:
+    if "domain" not in df.columns:
+        return sp.csr_matrix((len(df), 0))
+    dummies = pd.get_dummies(df["domain"].fillna("ml").astype(str), prefix="dom")
+    for d in SUPPORTED_DOMAINS:
+        col = f"dom_{d}"
+        if col not in dummies.columns:
+            dummies[col] = 0.0
+    dummies = dummies.sort_index(axis=1)
+    return sp.csr_matrix(dummies.astype(float).to_numpy())
 
-    test_df = load_test_data()
-    X_test_text = test_df["model_text"].tolist()
-    y_test = test_df["repro_label"].tolist()
 
-    metadata = load_metadata()
-    vectorizer = joblib.load(VECTORIZER_PATH)
-    clf = joblib.load(CLASSIFIER_PATH)
-    label_encoder = joblib.load(LABEL_ENCODER_PATH)
+def build_features(
+    vectorizer,
+    texts: list[str],
+    explicit_df: pd.DataFrame,
+    domain_matrix: sp.csr_matrix,
+) -> sp.csr_matrix:
+    X_text = vectorizer.transform(texts)
+    X_num  = sp.csr_matrix(explicit_df[EXPLICIT_FEATURE_COLUMNS].astype(float).to_numpy())
+    parts  = [X_text, X_num]
+    if domain_matrix.shape[1] > 0:
+        parts.append(domain_matrix)
+    return sp.hstack(parts, format="csr")
 
-    X_test = build_features(vectorizer, X_test_text, metadata)
-    y_pred_numeric = clf.predict(X_test)
-    y_pred = label_encoder.inverse_transform(y_pred_numeric)
 
-    acc = accuracy_score(y_test, y_pred)
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Evaluate domain classifier on test split.")
+    parser.add_argument(
+        "--domain", default="all",
+        help="Domain model to evaluate (default: all).",
+    )
+    parser.add_argument(
+        "--test-csv", default="",
+        help="Override test CSV path.",
+    )
+    args = parser.parse_args()
+
+    domain_tag    = validate_domain(args.domain) if args.domain not in ("", "all") else "all"
+    domain_filter = domain_tag if domain_tag != "all" else ""
+
+    ensure_dir(REPORT_DIR)
+
+    test_path = Path(args.test_csv) if args.test_csv else TEST_CSV
+    test_df   = load_test_data(domain_filter)
+    text_col  = test_df["text_column_used"].iloc[0]
+
+    # Load model via latest.json
+    try:
+        model_dir = read_latest_model_dir(MODELS_BASE, domain_tag)
+    except FileNotFoundError as e:
+        print(f"❌ {e}")
+        sys.exit(1)
+
+    vectorizer    = joblib.load(model_dir / "vectorizer.joblib")
+    clf           = joblib.load(model_dir / "classifier.joblib")
+    label_encoder = joblib.load(model_dir / "label_encoder.joblib")
+    metadata: dict = {}
+    meta_path = model_dir / "metadata.json"
+    if meta_path.exists():
+        try:
+            metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    X_test_text = test_df[text_col].tolist()
+    y_test      = test_df["repro_label"].tolist()
+    dom_test    = get_domain_onehot(test_df)
+
+    X_test      = build_features(vectorizer, X_test_text, test_df, dom_test)
+    y_pred_num  = clf.predict(X_test)
+    y_pred      = label_encoder.inverse_transform(y_pred_num)
+
+    # Calibrated probabilities
+    proba_rows: list[dict] = []
+    if hasattr(clf, "predict_proba"):
+        probas = clf.predict_proba(X_test)
+        for i in range(len(y_pred)):
+            proba_rows.append({
+                label_encoder.classes_[j]: float(probas[i, j])
+                for j in range(len(label_encoder.classes_))
+            })
+
+    acc         = float(accuracy_score(y_test, y_pred))
     report_text = classification_report(y_test, y_pred, digits=4, zero_division=0)
     report_dict = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
 
     labels = list(label_encoder.classes_)
-    cm = confusion_matrix(y_test, y_pred, labels=labels)
-    cm_df = pd.DataFrame(
+    cm     = confusion_matrix(y_test, y_pred, labels=labels)
+    cm_df  = pd.DataFrame(
         cm,
-        index=[f"true_{x}" for x in labels],
+        index=[f"true_{x}"  for x in labels],
         columns=[f"pred_{x}" for x in labels],
     )
 
-    EVAL_TXT_PATH.write_text(f"Test accuracy: {acc:.4f}\n\n{report_text}", encoding="utf-8")
-    cm_df.to_csv(CONF_MATRIX_PATH, index=True)
+    eval_txt_path  = REPORT_DIR / f"evaluation_{domain_tag}.txt"
+    conf_mat_path  = REPORT_DIR / f"confusion_matrix_{domain_tag}.csv"
+    eval_json_path = REPORT_DIR / f"evaluation_summary_{domain_tag}.json"
+
+    eval_txt_path.write_text(f"Test accuracy: {acc:.4f}\n\n{report_text}", encoding="utf-8")
+    cm_df.to_csv(conf_mat_path, index=True)
+
+    # Calibration check: mean predicted probability vs actual positive rate
+    calibration_info: dict = {}
+    if proba_rows:
+        yes_probs = [r.get("YES", 0.0) for r in proba_rows]
+        actual    = [1 if y == "YES" else 0 for y in y_test]
+        calibration_info = {
+            "mean_predicted_yes_prob": float(np.mean(yes_probs)),
+            "actual_yes_rate":         float(np.mean(actual)),
+            "calibration_gap":         float(abs(np.mean(yes_probs) - np.mean(actual))),
+        }
 
     summary = {
-        "test_accuracy": float(acc),
-        "labels": labels,
+        "schema_version":       PIPELINE_SCHEMA_VERSION,
+        "domain":               domain_tag,
+        "model_dir":            str(model_dir),
+        "calibration":          metadata.get("calibration", "unknown"),
+        "test_accuracy":        float(acc),
+        "labels":               labels,
         "classification_report": report_dict,
-        "test_rows": int(len(test_df)),
-        "model_dir": str(MODEL_DIR),
-        "feature_engineering": metadata.get("feature_engineering", ""),
-        "used_keyword_flags": bool(("keyword" in str(metadata.get("feature_engineering", "")).lower()) or metadata.get("keyword_flag_names")),
+        "test_rows":            int(len(test_df)),
+        "calibration_check":    calibration_info,
+        "feature_engineering":  metadata.get("feature_engineering", ""),
     }
+    write_json(eval_json_path, summary)
 
-    with open(EVAL_JSON_PATH, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2)
-
-    print(f"✅ Evaluation text report saved to: {EVAL_TXT_PATH}")
-    print(f"✅ Confusion matrix saved to: {CONF_MATRIX_PATH}")
-    print(f"✅ Evaluation summary saved to: {EVAL_JSON_PATH}")
-    print("\nTest accuracy:", round(acc, 4))
+    print(f"✅ Evaluation report → {eval_json_path}")
+    print(f"✅ Confusion matrix  → {conf_mat_path}")
+    print(f"\nTest accuracy ({domain_tag}): {round(acc, 4)}")
     print(report_text)
+    if calibration_info:
+        gap = calibration_info["calibration_gap"]
+        quality = "✅ Good" if gap < 0.05 else ("⚠ Moderate" if gap < 0.10 else "❌ Poor")
+        print(f"Calibration gap: {gap:.4f}  {quality}")
 
 
 if __name__ == "__main__":

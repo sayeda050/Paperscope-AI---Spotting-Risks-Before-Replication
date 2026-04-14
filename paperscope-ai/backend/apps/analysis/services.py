@@ -15,6 +15,7 @@ from .model_registry_service import (
     list_models,
     get_active_model,
     predict_with_active_model,
+    predict_score_with_active_model,
     compute_base_feature_flags,
 )
 
@@ -187,38 +188,64 @@ def is_admin_user(user) -> bool:
 
 
 def sync_model_versions_from_registry() -> List[ModelVersion]:
-    registry_models = list_models()
-    active_spec = get_active_model()
-    active_name = active_spec["name"] if active_spec else None
+    """
+    Sync ModelVersion database rows from the ML registry.
+
+    Handles both the new registry format (models as list with model_key, is_active,
+    model_dir, vectorizer_path, classifier_path) and the legacy format.
+    """
+    registry_models = list_models()  # list of entry dicts from model_registry_service
 
     existing = {mv.model_name: mv for mv in ModelVersion.objects.all()}
-    ordered = []
+    ordered: List[ModelVersion] = []
+
+    # Determine which model is active
+    active_key = next(
+        (m["model_key"] for m in registry_models if m.get("is_active")),
+        None,
+    )
 
     with transaction.atomic():
-        if active_name:
-            ModelVersion.objects.filter(active_flag=True).exclude(model_name=active_name).update(active_flag=False)
+        if active_key:
+            ModelVersion.objects.filter(active_flag=True).exclude(model_name=active_key).update(active_flag=False)
 
         for spec in registry_models:
-            model_dir = f"backend/ml_assets/models/{spec['artifactSubdir']}"
-            vectorizer_path = f"{model_dir}/vectorizer.joblib"
-            classifier_path = f"{model_dir}/classifier.joblib"
+            # New format uses model_key; old format used name — support both
+            model_key = spec.get("model_key") or spec.get("name") or ""
+            if not model_key:
+                continue
 
-            if spec.get("pipelineType") != "text_input_v1":
-                vectorizer_path = f"{model_dir}/feature_columns.json"
+            # Prefer absolute paths from new format; build relative from old format
+            vectorizer_path = spec.get("vectorizer_path") or ""
+            classifier_path = spec.get("classifier_path") or ""
 
-            obj = existing.get(spec["name"])
+            # Legacy fallback: reconstruct paths from artifactSubdir
+            if not vectorizer_path and spec.get("artifactSubdir"):
+                model_dir_rel   = f"backend/ml_assets/models/{spec['artifactSubdir']}"
+                vectorizer_path = f"{model_dir_rel}/vectorizer.joblib"
+                classifier_path = f"{model_dir_rel}/classifier.joblib"
+                if spec.get("pipelineType") and spec["pipelineType"] != "text_input_v1":
+                    vectorizer_path = f"{model_dir_rel}/feature_columns.json"
+
+            is_active = bool(spec.get("is_active") or spec.get("active", False))
+
+            obj = existing.get(model_key)
             if obj is None:
                 obj = ModelVersion.objects.create(
-                    model_name=spec["name"],
+                    model_name=model_key,
                     artifact_path_vectorizer=vectorizer_path,
                     artifact_path_classifier=classifier_path,
-                    active_flag=bool(spec.get("active")),
+                    active_flag=is_active,
                 )
             else:
                 obj.artifact_path_vectorizer = vectorizer_path
                 obj.artifact_path_classifier = classifier_path
-                obj.active_flag = bool(spec.get("active"))
-                obj.save(update_fields=["artifact_path_vectorizer", "artifact_path_classifier", "active_flag"])
+                obj.active_flag = is_active
+                obj.save(update_fields=[
+                    "artifact_path_vectorizer",
+                    "artifact_path_classifier",
+                    "active_flag",
+                ])
             ordered.append(obj)
 
     return ordered
@@ -246,7 +273,7 @@ def score_from_prediction(label: str, probabilities: Dict[str, float] | None) ->
 
     if "YES" in upper_probs or "NO" in upper_probs:
         yes = upper_probs.get("YES")
-        no = upper_probs.get("NO")
+        no  = upper_probs.get("NO")
 
         if yes is None and no is not None:
             yes = 1.0 - no
@@ -280,8 +307,8 @@ def extract_keywords(cleaned_text: str, limit: int = 8) -> List[Tuple[str, float
     tokens = re.findall(r"[A-Za-z][A-Za-z\-+]{2,}", cleaned_text.lower())
     tokens = [t for t in tokens if t not in STOPWORDS and not t.isdigit()]
     counts = Counter(tokens)
-    total = sum(counts.values()) or 1
-    items = counts.most_common(limit)
+    total  = sum(counts.values()) or 1
+    items  = counts.most_common(limit)
     return [(word, round(freq / total, 6)) for word, freq in items]
 
 
@@ -295,13 +322,13 @@ def save_keywords_for_paper(paper: Paper, cleaned_text: str) -> None:
 
 def _detect_actual_llm_method_paper(text: str) -> bool:
     text = text.lower()
-    start_idx = len(text) // 5
-    body_text = text[start_idx:]
+    start_idx  = len(text) // 5
+    body_text  = text[start_idx:]
 
     llm_mentions_total = len(LLM_RE.findall(text))
-    llm_mentions_body = len(LLM_RE.findall(body_text))
-    prompt_hits = len(re.findall(r"\b(prompt|template|instruction|few-shot|zero-shot|chain-of-thought|in-context|agent)\b", body_text, re.I))
-    method_hits = len(re.findall(r"\b(we use|we employ|our method|our framework|our approach|uses|leverages|based on|built on)\b", body_text, re.I))
+    llm_mentions_body  = len(LLM_RE.findall(body_text))
+    prompt_hits  = len(re.findall(r"\b(prompt|template|instruction|few-shot|zero-shot|chain-of-thought|in-context|agent)\b", body_text, re.I))
+    method_hits  = len(re.findall(r"\b(we use|we employ|our method|our framework|our approach|uses|leverages|based on|built on)\b", body_text, re.I))
 
     if llm_mentions_body >= 2 and (prompt_hits >= 1 or method_hits >= 1):
         return True
@@ -313,9 +340,9 @@ def _detect_actual_llm_method_paper(text: str) -> bool:
 def _paper_type_scores(title: str, abstract: str, cleaned_text: str, signals: dict) -> dict:
     combined = f"{title} {abstract} {cleaned_text}".lower()
 
-    theory_score = 0
+    theory_score    = 0
     conceptual_score = 0
-    empirical_score = 0
+    empirical_score  = 0
 
     if signals["theorem_count"] >= 2:
         theory_score += 3
@@ -350,75 +377,73 @@ def _paper_type_scores(title: str, abstract: str, cleaned_text: str, signals: di
         empirical_score += 1
 
     is_theory_heavy = theory_score >= 4 and empirical_score <= 1
-    is_conceptual = not is_theory_heavy and conceptual_score >= 3 and empirical_score <= 1
-    is_empirical = not is_theory_heavy and not is_conceptual
+    is_conceptual   = not is_theory_heavy and conceptual_score >= 3 and empirical_score <= 1
+    is_empirical    = not is_theory_heavy and not is_conceptual
 
     return {
-        "theory_score": theory_score,
+        "theory_score":    theory_score,
         "conceptual_score": conceptual_score,
         "empirical_score": empirical_score,
         "is_theory_heavy": is_theory_heavy,
-        "is_conceptual": is_conceptual,
-        "is_empirical": is_empirical,
+        "is_conceptual":   is_conceptual,
+        "is_empirical":    is_empirical,
     }
 
 
 def _extract_repro_signals(title: str, abstract: str, cleaned_text: str, base_flags: dict) -> dict:
-    title = title or ""
-    abstract = abstract or ""
+    title        = title or ""
+    abstract     = abstract or ""
     cleaned_text = cleaned_text or ""
-    combined = f"{title}\n{abstract}\n{cleaned_text}"
-    text = combined.lower()
+    combined     = f"{title}\n{abstract}\n{cleaned_text}"
+    text         = combined.lower()
 
-    equation_count = len(EQUATION_ID_RE.findall(text))
-    algorithm_count = len(ALGORITHM_RE.findall(text))
-    table_count = len(TABLE_RE.findall(text))
-    theorem_count = len(THEOREM_RE.findall(text))
+    equation_count   = len(EQUATION_ID_RE.findall(text))
+    algorithm_count  = len(ALGORITHM_RE.findall(text))
+    table_count      = len(TABLE_RE.findall(text))
+    theorem_count    = len(THEOREM_RE.findall(text))
     appendix_math_hits = len(APPENDIX_MATH_RE.findall(text))
-    conceptual_hits = len(CONCEPTUAL_MODEL_RE.findall(text))
-    empirical_hits = len(EMPIRICAL_PROTOCOL_RE.findall(text))
+    conceptual_hits  = len(CONCEPTUAL_MODEL_RE.findall(text))
+    empirical_hits   = len(EMPIRICAL_PROTOCOL_RE.findall(text))
 
-    has_public_code = bool(ARTIFACT_LINK_RE.search(text))
+    has_public_code          = bool(ARTIFACT_LINK_RE.search(text))
     has_availability_section = bool(AVAILABILITY_SECTION_RE.search(text))
-    has_public_data = bool(PUBLIC_DATA_RE.search(text))
-    has_artifact_package = bool(ARTIFACT_PACKAGE_RE.search(text))
+    has_public_data          = bool(PUBLIC_DATA_RE.search(text))
+    has_artifact_package     = bool(ARTIFACT_PACKAGE_RE.search(text))
     has_execution_instructions = bool(EXECUTION_RE.search(text))
-    has_live_runtime_data = bool(LIVE_DATA_RE.search(text))
+    has_live_runtime_data    = bool(LIVE_DATA_RE.search(text))
 
-    has_seed_mentions = bool(SEED_RE.search(text)) or bool(base_flags.get("has_seed"))
+    has_seed_mentions  = bool(SEED_RE.search(text)) or bool(base_flags.get("has_seed"))
     has_version_details = bool(VERSION_RE.search(text))
-    has_env_details = bool(ENV_RE.search(text)) or bool(base_flags.get("has_env_details"))
+    has_env_details    = bool(ENV_RE.search(text)) or bool(base_flags.get("has_env_details"))
     has_parameter_details = bool(PARAM_DETAIL_RE.search(text)) or bool(base_flags.get("has_hyperparams"))
 
-    has_metrics = bool(METRIC_RE.search(text)) or bool(base_flags.get("has_metrics"))
+    has_metrics   = bool(METRIC_RE.search(text)) or bool(base_flags.get("has_metrics"))
     has_baselines = bool(BASELINE_RE.search(text)) or bool(base_flags.get("has_baselines"))
-    has_ablation = bool(ABLATION_RE.search(text)) or bool(base_flags.get("has_ablation"))
-    has_cv = bool(CV_RE.search(text))
+    has_ablation  = bool(ABLATION_RE.search(text)) or bool(base_flags.get("has_ablation"))
+    has_cv        = bool(CV_RE.search(text))
     has_nested_cv = bool(NESTED_CV_RE.search(text))
     has_external_validation = bool(EXTERNAL_VALIDATION_RE.search(text))
     has_stat_tests = bool(STAT_TEST_RE.search(text)) or bool(base_flags.get("has_statistical_tests"))
 
-    has_limitations = bool(LIMITATIONS_RE.search(text)) or bool(base_flags.get("has_limitations"))
+    has_limitations  = bool(LIMITATIONS_RE.search(text)) or bool(base_flags.get("has_limitations"))
     has_supplementary = bool(SUPPLEMENTARY_RE.search(text))
 
     has_validation_design = has_cv or has_nested_cv or has_external_validation
 
-    is_ml = bool(ML_RE.search(text))
-    is_biomed = bool(BIOMED_RE.search(text))
+    is_ml      = bool(ML_RE.search(text))
+    is_biomed  = bool(BIOMED_RE.search(text))
     is_finance = bool(FINANCE_RE.search(text))
-    is_hdl = bool(HDL_RE.search(text))
+    is_hdl     = bool(HDL_RE.search(text))
     is_llm_method = _detect_actual_llm_method_paper(text)
 
-    strong_empirical_evidence_count = sum(
-        [
-            1 if has_public_data else 0,
-            1 if has_validation_design else 0,
-            1 if has_baselines else 0,
-            1 if has_ablation else 0,
-            1 if (has_metrics and table_count >= 2) else 0,
-            1 if empirical_hits >= 2 else 0,
-        ]
-    )
+    strong_empirical_evidence_count = sum([
+        1 if has_public_data else 0,
+        1 if has_validation_design else 0,
+        1 if has_baselines else 0,
+        1 if has_ablation else 0,
+        1 if (has_metrics and table_count >= 2) else 0,
+        1 if empirical_hits >= 2 else 0,
+    ])
 
     has_strong_theory_detail = (
         theorem_count >= 5
@@ -434,56 +459,54 @@ def _extract_repro_signals(title: str, abstract: str, cleaned_text: str, base_fl
         )
     )
 
-    strong_eval = sum(
-        [
-            1 if has_metrics else 0,
-            1 if has_baselines else 0,
-            1 if has_ablation else 0,
-            1 if has_validation_design else 0,
-            1 if has_stat_tests else 0,
-        ]
-    ) >= 3
+    strong_eval = sum([
+        1 if has_metrics else 0,
+        1 if has_baselines else 0,
+        1 if has_ablation else 0,
+        1 if has_validation_design else 0,
+        1 if has_stat_tests else 0,
+    ]) >= 3
 
     code_heavy_domain = is_ml or is_llm_method or is_hdl or is_finance or (is_biomed and strong_empirical_evidence_count >= 2)
 
     signals = {
-        "has_public_code": has_public_code,
-        "has_availability_section": has_availability_section,
-        "has_public_data": has_public_data,
-        "has_artifact_package": has_artifact_package,
-        "has_execution_instructions": has_execution_instructions,
-        "has_live_runtime_data": has_live_runtime_data,
-        "has_seed_mentions": has_seed_mentions,
-        "has_version_details": has_version_details,
-        "has_env_details": has_env_details,
-        "has_parameter_details": has_parameter_details,
-        "has_metrics": has_metrics,
-        "has_baselines": has_baselines,
-        "has_ablation": has_ablation,
-        "has_cv": has_cv,
-        "has_nested_cv": has_nested_cv,
-        "has_external_validation": has_external_validation,
-        "has_stat_tests": has_stat_tests,
-        "has_limitations": has_limitations,
-        "has_supplementary": has_supplementary,
-        "has_validation_design": has_validation_design,
-        "has_strong_method_detail": has_strong_method_detail,
-        "has_strong_theory_detail": has_strong_theory_detail,
-        "strong_eval": strong_eval,
-        "equation_count": equation_count,
-        "algorithm_count": algorithm_count,
-        "table_count": table_count,
-        "theorem_count": theorem_count,
-        "appendix_math_hits": appendix_math_hits,
-        "conceptual_hits": conceptual_hits,
-        "empirical_hits": empirical_hits,
+        "has_public_code":             has_public_code,
+        "has_availability_section":    has_availability_section,
+        "has_public_data":             has_public_data,
+        "has_artifact_package":        has_artifact_package,
+        "has_execution_instructions":  has_execution_instructions,
+        "has_live_runtime_data":       has_live_runtime_data,
+        "has_seed_mentions":           has_seed_mentions,
+        "has_version_details":         has_version_details,
+        "has_env_details":             has_env_details,
+        "has_parameter_details":       has_parameter_details,
+        "has_metrics":                 has_metrics,
+        "has_baselines":               has_baselines,
+        "has_ablation":                has_ablation,
+        "has_cv":                      has_cv,
+        "has_nested_cv":               has_nested_cv,
+        "has_external_validation":     has_external_validation,
+        "has_stat_tests":              has_stat_tests,
+        "has_limitations":             has_limitations,
+        "has_supplementary":           has_supplementary,
+        "has_validation_design":       has_validation_design,
+        "has_strong_method_detail":    has_strong_method_detail,
+        "has_strong_theory_detail":    has_strong_theory_detail,
+        "strong_eval":                 strong_eval,
+        "equation_count":              equation_count,
+        "algorithm_count":             algorithm_count,
+        "table_count":                 table_count,
+        "theorem_count":               theorem_count,
+        "appendix_math_hits":          appendix_math_hits,
+        "conceptual_hits":             conceptual_hits,
+        "empirical_hits":              empirical_hits,
         "strong_empirical_evidence_count": strong_empirical_evidence_count,
-        "is_ml": is_ml,
-        "is_biomed": is_biomed,
-        "is_finance": is_finance,
-        "is_hdl": is_hdl,
-        "is_llm_method": is_llm_method,
-        "code_heavy_domain": code_heavy_domain,
+        "is_ml":                       is_ml,
+        "is_biomed":                   is_biomed,
+        "is_finance":                  is_finance,
+        "is_hdl":                      is_hdl,
+        "is_llm_method":               is_llm_method,
+        "code_heavy_domain":           code_heavy_domain,
     }
     signals.update(_paper_type_scores(title, abstract, cleaned_text, signals))
     return signals
@@ -524,13 +547,13 @@ def _apply_general_floor(score: float, signals: dict) -> float:
     return max(score, floor_score)
 
 
-def _calibrate_score(title: str, abstract: str, cleaned_text: str, prediction: dict) -> dict:
-    text = sanitize_text_for_db(cleaned_text, collapse_whitespace=True)
+def _heuristic_calibrate_score(title: str, abstract: str, cleaned_text: str, prediction: dict) -> dict:
+    text       = sanitize_text_for_db(cleaned_text, collapse_whitespace=True)
     base_flags = compute_base_feature_flags({"model_text": text})
 
-    raw_base_score = score_from_prediction(prediction.get("prediction"), prediction.get("probabilities"))
+    raw_base_score    = score_from_prediction(prediction.get("prediction"), prediction.get("probabilities"))
     tempered_base_score = 55.0 + 0.45 * (raw_base_score - 55.0)
-    signals = _extract_repro_signals(title or "", abstract or "", text, base_flags)
+    signals           = _extract_repro_signals(title or "", abstract or "", text, base_flags)
 
     negatives: List[str] = []
     positives: List[str] = []
@@ -571,20 +594,20 @@ def _calibrate_score(title: str, abstract: str, cleaned_text: str, prediction: d
             score += 3
             negatives.append("Theoretical justification is limited or lightly documented.")
 
-        score = clamp_score(score)
-        score = _apply_general_floor(score, signals)
-        score = round(score, 2)
+        score    = clamp_score(score)
+        score    = _apply_general_floor(score, signals)
+        score    = round(score, 2)
         db_label = label_from_score(score)
 
         return {
-            "raw_base_score": raw_base_score,
+            "raw_base_score":      raw_base_score,
             "tempered_base_score": round(tempered_base_score, 2),
-            "calibrated_score": score,
-            "db_label": db_label,
-            "base_flags": base_flags,
-            "signals": signals,
-            "negatives": negatives,
-            "positives": positives,
+            "calibrated_score":    score,
+            "db_label":            db_label,
+            "base_flags":          base_flags,
+            "signals":             signals,
+            "negatives":           negatives,
+            "positives":           positives,
         }
 
     # CONCEPTUAL / MODEL PAPERS
@@ -631,20 +654,20 @@ def _calibrate_score(title: str, abstract: str, cleaned_text: str, prediction: d
             score -= 2
             positives.append("The paper clearly discloses a public dataset, cohort, or data source.")
 
-        score = clamp_score(score)
-        score = _apply_general_floor(score, signals)
-        score = round(score, 2)
+        score    = clamp_score(score)
+        score    = _apply_general_floor(score, signals)
+        score    = round(score, 2)
         db_label = label_from_score(score)
 
         return {
-            "raw_base_score": raw_base_score,
+            "raw_base_score":      raw_base_score,
             "tempered_base_score": round(tempered_base_score, 2),
-            "calibrated_score": score,
-            "db_label": db_label,
-            "base_flags": base_flags,
-            "signals": signals,
-            "negatives": negatives,
-            "positives": positives,
+            "calibrated_score":    score,
+            "db_label":            db_label,
+            "base_flags":          base_flags,
+            "signals":             signals,
+            "negatives":           negatives,
+            "positives":           positives,
         }
 
     # EMPIRICAL / ARTIFACT-DRIVEN PAPERS
@@ -780,20 +803,20 @@ def _calibrate_score(title: str, abstract: str, cleaned_text: str, prediction: d
         score -= 1.5
         positives.append("The evaluation protocol is comparatively strong and well specified.")
 
-    score = clamp_score(score)
-    score = _apply_general_floor(score, signals)
-    score = round(score, 2)
+    score    = clamp_score(score)
+    score    = _apply_general_floor(score, signals)
+    score    = round(score, 2)
     db_label = label_from_score(score)
 
     return {
-        "raw_base_score": raw_base_score,
+        "raw_base_score":      raw_base_score,
         "tempered_base_score": round(tempered_base_score, 2),
-        "calibrated_score": score,
-        "db_label": db_label,
-        "base_flags": base_flags,
-        "signals": signals,
-        "negatives": negatives,
-        "positives": positives,
+        "calibrated_score":    score,
+        "db_label":            db_label,
+        "base_flags":          base_flags,
+        "signals":             signals,
+        "negatives":           negatives,
+        "positives":           positives,
     }
 
 
@@ -934,37 +957,128 @@ def _build_section_scores(calibration: dict) -> List[dict]:
 
     return [
         {
-            "name": "Methodology",
-            "score": clamp_section(int(round(methodology))),
+            "name":   "Methodology",
+            "score":  clamp_section(int(round(methodology))),
             "detail": "Lower is better. This score reflects implementation specificity and methodological transparency.",
         },
         {
-            "name": "Data Availability",
-            "score": clamp_section(int(round(data_availability))),
+            "name":   "Data Availability",
+            "score":  clamp_section(int(round(data_availability))),
             "detail": "Lower is better. This score reflects data-source transparency and artifact discoverability.",
         },
         {
-            "name": "Statistical Rigor",
-            "score": clamp_section(int(round(statistical_rigor))),
+            "name":   "Statistical Rigor",
+            "score":  clamp_section(int(round(statistical_rigor))),
             "detail": "Lower is better. This score reflects metrics, validation design, comparisons, and evaluation depth.",
         },
         {
-            "name": "Code Availability",
-            "score": clamp_section(int(round(code_availability))),
+            "name":   "Code Availability",
+            "score":  clamp_section(int(round(code_availability))),
             "detail": "Lower is better. This score reflects whether code, packages, instructions, and execution details are directly available.",
         },
     ]
 
 
+def _build_score_model_payload(title: str, abstract: str, cleaned_text: str) -> dict:
+    return {
+        "title":         title or "",
+        "abstract":      abstract or "",
+        "model_text":    cleaned_text or "",
+        "review_text":   "",
+        "decision_text": "",
+        "venue":         "",
+        "year":          0,
+        "review_count":  0,
+    }
+
+
+def _score_with_trained_calibrator(title: str, abstract: str, cleaned_text: str, prediction: dict) -> dict:
+    payload          = _build_score_model_payload(title, abstract, cleaned_text)
+    score_prediction = predict_score_with_active_model(payload)
+    if not isinstance(score_prediction, dict):
+        raise ValueError("Score calibrator returned an invalid response.")
+
+    # BUG FIX: old code used score_prediction.get("score", 50.0) but the
+    # return dict key is "predicted_score". We check both for safety.
+    final_score = float(
+        score_prediction.get("predicted_score",
+        score_prediction.get("score", 50.0))
+    )
+    final_score = clamp_score(final_score)
+    db_label    = label_from_score(final_score)
+
+    text       = sanitize_text_for_db(cleaned_text, collapse_whitespace=True)
+    base_flags = compute_base_feature_flags({"model_text": text})
+    signals    = _extract_repro_signals(title or "", abstract or "", text, base_flags)
+
+    negatives: List[str] = []
+    positives: List[str] = []
+
+    if not signals["has_public_code"]:
+        negatives.append("No clear public code or artifact link was detected.")
+    else:
+        positives.append("A public code or artifact link was detected.")
+
+    if not signals["has_public_data"]:
+        negatives.append("No explicit public data or repository access statement was detected.")
+    else:
+        positives.append("The paper clearly discloses a public dataset, cohort, or data source.")
+
+    if not signals["has_artifact_package"] and not signals["has_execution_instructions"]:
+        negatives.append("No reproducibility package or clear execution instructions were detected.")
+    else:
+        positives.append("The paper includes artifact packaging or execution guidance.")
+
+    if not signals["has_validation_design"]:
+        negatives.append("Validation or test protocol details are limited.")
+
+    if not signals["has_metrics"]:
+        negatives.append("Evaluation metrics are not clearly specified.")
+
+    if signals["has_env_details"] or signals["has_version_details"]:
+        positives.append("Environment or software-version details are provided.")
+    else:
+        negatives.append("Exact environment or software-version details are limited.")
+
+    if signals["has_seed_mentions"]:
+        positives.append("Random seed or reproducibility-control details are mentioned.")
+    else:
+        negatives.append("Random seed information is missing or unclear.")
+
+    raw_base_score = score_from_prediction(prediction.get("prediction"), prediction.get("probabilities"))
+
+    return {
+        "raw_base_score":      raw_base_score,
+        "tempered_base_score": round(final_score, 2),
+        "calibrated_score":    round(final_score, 2),
+        "db_label":            db_label,
+        "base_flags":          base_flags,
+        "signals":             signals,
+        "negatives":           negatives[:8],
+        "positives":           positives[:8],
+        "score_model":         score_prediction,
+        "calibration_source":  "trained_score_calibrator",
+    }
+
+
+def _calibrate_score(title: str, abstract: str, cleaned_text: str, prediction: dict) -> dict:
+    try:
+        return _score_with_trained_calibrator(title, abstract, cleaned_text, prediction)
+    except Exception:
+        calibration = _heuristic_calibrate_score(title, abstract, cleaned_text, prediction)
+        calibration["calibration_source"] = "heuristic_fallback"
+        return calibration
+
+
 def build_explanation(title: str, abstract: str, cleaned_text: str, prediction: dict) -> dict:
-    title = sanitize_text_for_db(title, collapse_whitespace=True)
-    abstract = sanitize_text_for_db(abstract, collapse_whitespace=True)
+    title        = sanitize_text_for_db(title, collapse_whitespace=True)
+    abstract     = sanitize_text_for_db(abstract, collapse_whitespace=True)
     cleaned_text = sanitize_text_for_db(cleaned_text, collapse_whitespace=True)
 
     calibration = _calibrate_score(title, abstract, cleaned_text, prediction)
-    keywords = [word for word, _ in extract_keywords(cleaned_text)]
+    keywords    = [word for word, _ in extract_keywords(cleaned_text)]
 
-    score = int(round(calibration["calibrated_score"]))
+    score       = int(round(calibration["calibrated_score"]))
     top_factors = calibration["negatives"] + calibration["positives"]
     if not top_factors:
         top_factors = ["The paper contains a balanced mix of reproducibility indicators."]
@@ -979,47 +1093,49 @@ def build_explanation(title: str, abstract: str, cleaned_text: str, prediction: 
 
     if calibration["signals"]["is_theory_heavy"]:
         summary = (
-            f"The active model predicts the paper is {pred_phrase}. "
-            f"That prediction is then converted into a reproducibility risk score of {score}/100. "
+            f"The active TF-IDF + Logistic Regression model predicts the paper is {pred_phrase}. "
+            f"A trained score-calibration model then converts the paper into a reproducibility risk score of {score}/100. "
             f"For theory-heavy papers, the final score reflects proof structure, mathematical completeness, "
             f"appendix detail, and artifact availability only when relevant."
         )
     elif calibration["signals"]["is_conceptual"]:
         summary = (
-            f"The active model predicts the paper is {pred_phrase}. "
-            f"That prediction is then converted into a reproducibility risk score of {score}/100. "
+            f"The active TF-IDF + Logistic Regression model predicts the paper is {pred_phrase}. "
+            f"A trained score-calibration model then converts the paper into a reproducibility risk score of {score}/100. "
             f"For conceptual or model-driven papers, the final score reflects model clarity, mathematical detail, "
             f"scope transparency, and artifact availability when relevant."
         )
     else:
         summary = (
-            f"The active model predicts the paper is {pred_phrase}. "
-            f"That prediction is then converted into a reproducibility risk score of {score}/100. "
+            f"The active TF-IDF + Logistic Regression model predicts the paper is {pred_phrase}. "
+            f"A trained score-calibration model then converts the paper into a reproducibility risk score of {score}/100. "
             f"The final score reflects artifact/data availability, method completeness, execution detail, "
             f"and evaluation rigor."
         )
 
     return sanitize_json_for_db({
-        "summary": summary,
+        "summary":    summary,
         "topFactors": top_factors[:8],
-        "sections": _build_section_scores(calibration),
-        "keywords": keywords,
-        "model": prediction.get("model", {}),
+        "sections":   _build_section_scores(calibration),
+        "keywords":   keywords,
+        "model":      prediction.get("model", {}),
         "rawPrediction": prediction,
         "calibration": {
-            "rawBaseScore": calibration["raw_base_score"],
+            "rawBaseScore":      calibration["raw_base_score"],
             "temperedBaseScore": calibration["tempered_base_score"],
-            "finalScore": calibration["calibrated_score"],
-            "signals": calibration["signals"],
+            "finalScore":        calibration["calibrated_score"],
+            "signals":           calibration["signals"],
+            "source":            calibration.get("calibration_source", "unknown"),
+            "scoreModel":        calibration.get("score_model"),
         },
     })
 
 
 def run_analysis_for_paper(*, paper: Paper, user, title: str, cleaned_text: str, raw_text: str, abstract: str = "") -> AnalysisJob:
-    title = sanitize_text_for_db(title, collapse_whitespace=True)
+    title        = sanitize_text_for_db(title, collapse_whitespace=True)
     cleaned_text = sanitize_text_for_db(cleaned_text, collapse_whitespace=True)
-    raw_text = sanitize_text_for_db(raw_text, collapse_whitespace=False)
-    abstract = sanitize_text_for_db(abstract, collapse_whitespace=True)
+    raw_text     = sanitize_text_for_db(raw_text, collapse_whitespace=False)
+    abstract     = sanitize_text_for_db(abstract, collapse_whitespace=True)
 
     job = AnalysisJob.objects.create(
         paper=paper,
@@ -1034,7 +1150,7 @@ def run_analysis_for_paper(*, paper: Paper, user, title: str, cleaned_text: str,
         PaperText.objects.update_or_create(
             paper=paper,
             defaults={
-                "raw_text": raw_text,
+                "raw_text":     raw_text,
                 "cleaned_text": cleaned_text,
             },
         )
@@ -1043,43 +1159,43 @@ def run_analysis_for_paper(*, paper: Paper, user, title: str, cleaned_text: str,
 
         active_model_version = get_active_model_version()
         prediction = predict_with_active_model({
-            "title": title,
-            "abstract": abstract,
-            "model_text": cleaned_text,
-            "review_text": "",
-            "decision_text": "",
-            "venue": "",
-            "year": 0,
-            "review_count": 0,
+            "title":          title,
+            "abstract":       abstract,
+            "model_text":     cleaned_text,
+            "review_text":    "",
+            "decision_text":  "",
+            "venue":          "",
+            "year":           0,
+            "review_count":   0,
         })
 
         explanation = build_explanation(title, abstract, cleaned_text, prediction)
         final_score = float(explanation["calibration"]["finalScore"])
-        db_label = label_from_score(final_score)
-        now = timezone.now()
+        db_label    = label_from_score(final_score)
+        now         = timezone.now()
 
         AnalysisResult.objects.update_or_create(
             job=job,
             defaults={
                 "model_version": active_model_version,
-                "risk_score": Decimal(str(round(final_score, 2))),
-                "risk_label": db_label,
+                "risk_score":    Decimal(str(round(final_score, 2))),
+                "risk_label":    db_label,
                 "explanation_json": explanation,
-                "completed_at": now,
+                "completed_at":  now,
             },
         )
 
-        job.status = AnalysisJob.Status.DONE
+        job.status       = AnalysisJob.Status.DONE
         job.completed_at = now
         job.error_message = None
         job.save(update_fields=["status", "completed_at", "error_message"])
         return job
 
     except Exception as exc:
-        now = timezone.now()
+        now        = timezone.now()
         safe_error = sanitize_text_for_db(str(exc), collapse_whitespace=True)
-        job.status = AnalysisJob.Status.FAILED
-        job.completed_at = now
+        job.status        = AnalysisJob.Status.FAILED
+        job.completed_at  = now
         job.error_message = safe_error
         job.save(update_fields=["status", "completed_at", "error_message"])
         log_error(module_name="analysis_pipeline", message=safe_error, user=user, paper=paper)
@@ -1087,7 +1203,7 @@ def run_analysis_for_paper(*, paper: Paper, user, title: str, cleaned_text: str,
 
 
 def retry_analysis_job(job: AnalysisJob, *, requested_by) -> AnalysisJob:
-    paper = job.paper
+    paper    = job.paper
     text_obj = getattr(paper, "text", None)
     if text_obj is None:
         raise ValueError("Paper text is missing, so this job cannot be retried.")

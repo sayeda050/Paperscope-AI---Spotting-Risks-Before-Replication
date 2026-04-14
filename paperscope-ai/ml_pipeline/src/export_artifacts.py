@@ -26,19 +26,31 @@ ML_ASSETS    = BACKEND_DIR / "ml_assets"
 MODELS_OUT   = ML_ASSETS / "models"
 REGISTRY     = ML_ASSETS / "registry.json"
 
+# Only metadata.json is truly required — it is written by every training script.
 REQUIRED_FILES = [
+    "metadata.json",
+]
+
+# All model artifacts are optional individually; the guard below ensures at
+# least one real model file is present before the export proceeds.
+OPTIONAL_FILES = [
+    # Classifier artifacts (from train_tfidf_logreg.py)
     "classifier.joblib",
     "label_encoder.joblib",
-    "metadata.json",
-    "train_report.json",
-]
-OPTIONAL_FILES = [
     "vectorizer.joblib",
+    "train_report.json",
     "feature_coefficients.csv",
+    "confusion_matrix_test.csv",
+    # Calibrator artifacts (from train_score_calibrator.py)
     "score_calibrator.joblib",
     "score_feature_columns.json",
     "score_calibrator_report.json",
-    "confusion_matrix_test.csv",
+]
+
+# At least one of these must be present — otherwise there is nothing useful to export.
+MUST_HAVE_ONE_OF = [
+    "classifier.joblib",
+    "score_calibrator.joblib",
 ]
 
 
@@ -100,7 +112,18 @@ def main() -> None:
         shutil.copy2(src_file, dest_dir / fname)
         print(f"  ✅ {fname}")
 
-    # Copy optional files
+    # Guard: at least one real model artifact must be present before we proceed
+    present_models = [f for f in MUST_HAVE_ONE_OF if (src_dir / f).exists()]
+    if not present_models:
+        raise FileNotFoundError(
+            f"No usable model artifact found in {src_dir}\n"
+            f"Expected at least one of: {MUST_HAVE_ONE_OF}\n"
+            f"Run one or both of:\n"
+            f"  python train_tfidf_logreg.py --domain {domain_tag}\n"
+            f"  python train_score_calibrator.py --domain {domain_tag}"
+        )
+
+    # Copy optional files (silently skip any that don't exist)
     for fname in OPTIONAL_FILES:
         src_file = src_dir / fname
         if src_file.exists():
@@ -116,9 +139,9 @@ def main() -> None:
     existing_ids = {m.get("id") for m in models}
     if model_name not in existing_ids:
         models.append({
-            "id":         model_name,
-            "domain":     domain_tag,
-            "run_id":     run_id,
+            "id":          model_name,
+            "domain":      domain_tag,
+            "run_id":      run_id,
             "exported_at": datetime.now(timezone.utc).isoformat(),
         })
 

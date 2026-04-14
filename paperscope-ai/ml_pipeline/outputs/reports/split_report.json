@@ -1,18 +1,20 @@
 {
-  "total_rows_after_filtering": 635,
-  "train_rows": 444,
-  "val_rows": 95,
-  "test_rows": 96,
+  "schema_version": "2.0",
+  "domain_filter": "all",
+  "total_after_filter": 1132,
+  "train_rows": 792,
+  "val_rows": 170,
+  "test_rows": 170,
   "train_label_counts": {
-    "YES": 225,
-    "NO": 219
+    "NO": 493,
+    "YES": 299
   },
   "val_label_counts": {
-    "YES": 48,
-    "NO": 47
+    "NO": 106,
+    "YES": 64
   },
   "test_label_counts": {
-    "YES": 49,
-    "NO": 47
+    "NO": 106,
+    "YES": 64
   }
 }

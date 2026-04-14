@@ -1,15 +1,59 @@
 {
   "schema_version": "2.0",
-  "domain": "ml",
+  "domains_run": [
+    "biomed",
+    "finance",
+    "hardware",
+    "math",
+    "ml",
+    "physics"
+  ],
   "provider": "groq",
   "model": "llama-3.3-70b-versatile",
   "batch_size": 5,
-  "sample_size": 250,
-  "this_run_labeled": 15,
-  "this_run_failed": 0,
-  "total_labeled": 250,
+  "sample_size": 100,
+  "total_labeled": 700,
   "total_pending": 0,
-  "avg_target_score": 52.728,
+  "avg_target_score": 53.135714285714286,
   "output_file": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\gold_score_dataset.csv",
-  "failed_uids": []
+  "domain_stats": [
+    {
+      "domain": "biomed",
+      "labeled": 0,
+      "failed": 0,
+      "skipped": false
+    },
+    {
+      "domain": "finance",
+      "labeled": 0,
+      "failed": 0,
+      "skipped": false
+    },
+    {
+      "domain": "hardware",
+      "labeled": 0,
+      "failed": 0,
+      "skipped": false
+    },
+    {
+      "domain": "math",
+      "labeled": 0,
+      "failed": 0,
+      "skipped": false
+    },
+    {
+      "domain": "ml",
+      "labeled": 0,
+      "failed": 0,
+      "skipped": false
+    },
+    {
+      "domain": "physics",
+      "labeled": 5,
+      "failed": 0,
+      "skipped": false,
+      "sample_size": 100,
+      "failed_uids": []
+    }
+  ]
 }

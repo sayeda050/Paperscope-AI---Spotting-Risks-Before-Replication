@@ -1,34 +1,54 @@
 {
   "schema_version": "2.0",
-  "input_rows": 994,
-  "rows_labeled": 614,
+  "input_rows": 1994,
+  "rows_labeled": 1132,
   "domain_filter": "all",
-  "dropped_ambiguous": 380,
+  "dropped_ambiguous": 862,
   "dropped_below_confidence": 0,
   "labeled_from_reviewer_text": 99,
   "labeled_from_decision_text": 4,
   "labeled_from_llm": 0,
-  "labeled_from_feature_fallback": 511,
+  "labeled_from_feature_fallback": 1029,
   "llm_calls_made": 0,
   "label_counts": {
-    "YES": 319,
-    "NO": 295
+    "NO": 705,
+    "YES": 427
   },
   "label_source_counts": {
-    "feature_consensus": 511,
+    "feature_consensus": 1029,
     "review_text": 99,
     "decision_text": 4
   },
   "domain_label_counts": {
+    "biomed": {
+      "NO": 79,
+      "YES": 43
+    },
+    "finance": {
+      "NO": 137,
+      "YES": 15
+    },
+    "hardware": {
+      "YES": 37,
+      "NO": 32
+    },
+    "math": {
+      "NO": 17,
+      "YES": 7
+    },
     "ml": {
       "YES": 319,
       "NO": 295
+    },
+    "physics": {
+      "NO": 145,
+      "YES": 6
     }
   },
   "split": {
-    "train_rows": 429,
-    "val_rows": 92,
-    "test_rows": 93,
+    "train_rows": 792,
+    "val_rows": 170,
+    "test_rows": 170,
     "stratified": true
   },
   "leakage_guard": "train_text_input == model_text (review/decision text EXCLUDED from training)"

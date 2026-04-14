@@ -1,44 +1,46 @@
 {
   "schema_version": "2.0",
-  "rows": 614,
-  "columns": 67,
+  "rows": 1132,
+  "columns": 83,
   "missing_required_columns": [],
   "both_classes_present": true,
   "label_counts": {
-    "YES": 319,
-    "NO": 295
+    "NO": 705,
+    "YES": 427
   },
   "domain_counts": {
-    "ml": 614
+    "ml": 614,
+    "finance": 152,
+    "physics": 151,
+    "biomed": 122,
+    "hardware": 69,
+    "math": 24
   },
   "label_source_counts": {
-    "feature_consensus": 511,
+    "feature_consensus": 1029,
     "review_text": 99,
     "decision_text": 4
   },
-  "model_text_nonempty": 614,
-  "train_text_nonempty": 614,
+  "model_text_nonempty": 1132,
+  "train_text_nonempty": 1132,
   "duplicate_paper_uid": 0,
   "constant_columns": [
-    "source",
-    "venue",
-    "year",
-    "pdf_downloaded",
-    "schema_version",
-    "domain",
-    "training_text_source"
+    "schema_version_x",
+    "schema_version_y",
+    "training_text_source",
+    "schema_version"
   ],
   "score_stats": {
     "reproducibility_score": {
-      "min": 6.0,
+      "min": 0.0,
       "max": 88.0,
-      "mean": 51.26791530944625,
+      "mean": 43.92402826855124,
       "out_of_range_count": 0
     },
     "risk_score": {
       "min": 12.0,
-      "max": 94.0,
-      "mean": 48.73208469055375,
+      "max": 100.0,
+      "mean": 56.07597173144876,
       "out_of_range_count": 0
     }
   },
@@ -57,42 +59,57 @@
   "split_files": {
     "train": {
       "exists": true,
-      "rows": 429,
+      "rows": 792,
       "label_counts": {
-        "YES": 223,
-        "NO": 206
+        "NO": 493,
+        "YES": 299
       },
       "has_both_classes": true,
       "domain_counts": {
-        "ml": 429
+        "ml": 438,
+        "physics": 107,
+        "finance": 106,
+        "biomed": 77,
+        "hardware": 46,
+        "math": 18
       },
       "has_model_text": true,
       "has_train_text_input": true
     },
     "val": {
       "exists": true,
-      "rows": 92,
+      "rows": 170,
       "label_counts": {
-        "YES": 48,
-        "NO": 44
+        "NO": 106,
+        "YES": 64
       },
       "has_both_classes": true,
       "domain_counts": {
-        "ml": 92
+        "ml": 89,
+        "finance": 24,
+        "biomed": 20,
+        "physics": 20,
+        "hardware": 13,
+        "math": 4
       },
       "has_model_text": true,
       "has_train_text_input": true
     },
     "test": {
       "exists": true,
-      "rows": 93,
+      "rows": 170,
       "label_counts": {
-        "YES": 48,
-        "NO": 45
+        "NO": 106,
+        "YES": 64
       },
       "has_both_classes": true,
       "domain_counts": {
-        "ml": 93
+        "ml": 87,
+        "biomed": 25,
+        "physics": 24,
+        "finance": 22,
+        "hardware": 10,
+        "math": 2
       },
       "has_model_text": true,
       "has_train_text_input": true

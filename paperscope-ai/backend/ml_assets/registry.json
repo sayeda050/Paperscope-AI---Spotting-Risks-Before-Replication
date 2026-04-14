@@ -1,24 +1,268 @@
 {
   "schema_version": "2.0",
-  "updated_at": "2026-04-13T14:29:35.780733+00:00",
-  "models": [
-    {
-      "id": "tfidf_logreg_auto_v2"
+  "updated_at": "2026-04-14T20:04:58.468884+00:00",
+  "models": {
+    "tfidf_logreg_all_20260414_191800": {
+      "model_key": "tfidf_logreg_all_20260414_191800",
+      "display_name": "tfidf_logreg_all_20260414_191800",
+      "domain": "ml",
+      "run_id": "",
+      "model_dir": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_all_20260414_191800",
+      "vectorizer_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_all_20260414_191800\\vectorizer.joblib",
+      "classifier_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_all_20260414_191800\\classifier.joblib",
+      "label_encoder_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_all_20260414_191800\\label_encoder.joblib",
+      "score_calibrator_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_all_20260414_191800\\score_calibrator.joblib",
+      "score_feature_columns_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_all_20260414_191800\\score_feature_columns.json",
+      "metadata_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_all_20260414_191800\\metadata.json",
+      "created_at": null,
+      "metadata": {
+        "score_calibrator": {
+          "selected_model": "rf_400",
+          "feature_columns_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\all\\20260414_191800\\score_feature_columns.json",
+          "calibrator_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\all\\20260414_191800\\score_calibrator.joblib",
+          "report_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\all\\20260414_191800\\score_calibrator_report.json",
+          "new_features": [
+            "rubric_score",
+            "llm_label_binary"
+          ],
+          "cv_folds": 5
+        }
+      }
     },
-    {
-      "id": "tfidf_logreg_ml_20260413_142523",
+    "tfidf_logreg_auto_v2": {
+      "model_key": "tfidf_logreg_auto_v2",
+      "display_name": "tfidf_logreg_auto_v2",
+      "domain": "ml",
+      "run_id": "",
+      "model_dir": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_auto_v2",
+      "vectorizer_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_auto_v2\\vectorizer.joblib",
+      "classifier_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_auto_v2\\classifier.joblib",
+      "label_encoder_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_auto_v2\\label_encoder.joblib",
+      "score_calibrator_path": null,
+      "score_feature_columns_path": null,
+      "metadata_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_auto_v2\\metadata.json",
+      "created_at": null,
+      "metadata": {
+        "model_name": "tfidf_logreg_auto_v2",
+        "vectorizer_type": "TfidfVectorizer",
+        "classifier_type": "LogisticRegression",
+        "input_text": "model_text_only",
+        "target_column": "repro_label",
+        "feature_engineering": "tfidf_bigrams_plus_content_keyword_flags_v1",
+        "keyword_flag_names": [
+          "kw_code_link",
+          "kw_data_link",
+          "kw_hyperparams",
+          "kw_seed",
+          "kw_uncertainty",
+          "kw_compute",
+          "kw_ablation",
+          "kw_baselines",
+          "kw_limitations",
+          "kw_stat_tests"
+        ],
+        "selected_hyperparameters": {
+          "C": 0.05,
+          "class_weight": null
+        },
+        "train_rows": 322,
+        "val_rows": 69,
+        "test_rows": 70,
+        "train_plus_val_rows": 391,
+        "label_classes": [
+          "NO",
+          "YES"
+        ],
+        "vectorizer_params": {
+          "analyzer": "word",
+          "binary": false,
+          "decode_error": "strict",
+          "dtype": "<class 'numpy.float64'>",
+          "encoding": "utf-8",
+          "input": "content",
+          "lowercase": true,
+          "max_df": 0.95,
+          "max_features": 80000,
+          "min_df": 2,
+          "ngram_range": [
+            1,
+            2
+          ],
+          "norm": "l2",
+          "preprocessor": null,
+          "smooth_idf": true,
+          "stop_words": null,
+          "strip_accents": "unicode",
+          "sublinear_tf": true,
+          "token_pattern": "(?u)\\b\\w\\w+\\b",
+          "tokenizer": null,
+          "use_idf": true,
+          "vocabulary": null
+        },
+        "classifier_params": {
+          "C": 0.05,
+          "class_weight": null,
+          "dual": false,
+          "fit_intercept": true,
+          "intercept_scaling": 1,
+          "l1_ratio": 0.0,
+          "max_iter": 5000,
+          "n_jobs": null,
+          "penalty": "deprecated",
+          "random_state": 42,
+          "solver": "lbfgs",
+          "tol": 0.0001,
+          "verbose": 0,
+          "warm_start": false
+        }
+      }
+    },
+    "tfidf_logreg_ml_20260413_142523": {
+      "model_key": "tfidf_logreg_ml_20260413_142523",
+      "display_name": "tfidf_logreg_ml_20260413_142523",
       "domain": "ml",
       "run_id": "20260413_142523",
-      "exported_at": "2026-04-13T14:29:35.780703+00:00"
+      "model_dir": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_ml_20260413_142523",
+      "vectorizer_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_ml_20260413_142523\\vectorizer.joblib",
+      "classifier_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_ml_20260413_142523\\classifier.joblib",
+      "label_encoder_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_ml_20260413_142523\\label_encoder.joblib",
+      "score_calibrator_path": null,
+      "score_feature_columns_path": null,
+      "metadata_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_ml_20260413_142523\\metadata.json",
+      "created_at": "20260413_142523",
+      "metadata": {
+        "schema_version": "2.0",
+        "run_id": "20260413_142523",
+        "domain": "ml",
+        "model_name": "tfidf_logreg_ml_20260413_142523",
+        "vectorizer_type": "TfidfVectorizer",
+        "classifier_type": "LogisticRegression+IsotonicCalibration",
+        "input_text_column": "train_text_input",
+        "target_column": "repro_label",
+        "feature_engineering": "tfidf_bigrams_plus_attribute_features_plus_domain_onehot_v3",
+        "explicit_feature_names": [
+          "code_artifact",
+          "data_artifact",
+          "availability_statement",
+          "execution_instructions",
+          "hyperparams_detail",
+          "seed_disclosed",
+          "compute_detail",
+          "software_versions",
+          "evaluation_protocol",
+          "ablation",
+          "baseline_comparison",
+          "statistical_rigor",
+          "limitations"
+        ],
+        "domain_onehot_features": [
+          "dom_ml",
+          "dom_physics",
+          "dom_biomed",
+          "dom_nlp",
+          "dom_finance",
+          "dom_hardware",
+          "dom_math"
+        ],
+        "selected_hyperparameters": {
+          "C": 0.05,
+          "class_weight": "None"
+        },
+        "calibration": "isotonic",
+        "train_rows": 429,
+        "val_rows": 92,
+        "test_rows": 93,
+        "class_names": [
+          "NO",
+          "YES"
+        ],
+        "known_classes": [
+          "NO",
+          "YES"
+        ]
+      }
+    },
+    "tfidf_lr_v1": {
+      "model_key": "tfidf_lr_v1",
+      "display_name": "tfidf_lr_v1",
+      "domain": "ml",
+      "run_id": "",
+      "model_dir": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_lr_v1",
+      "vectorizer_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_lr_v1\\vectorizer.joblib",
+      "classifier_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_lr_v1\\classifier.joblib",
+      "label_encoder_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_lr_v1\\label_encoder.joblib",
+      "score_calibrator_path": null,
+      "score_feature_columns_path": null,
+      "metadata_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_lr_v1\\metadata.json",
+      "created_at": null,
+      "metadata": {
+        "model_name": "tfidf_lr_v1",
+        "vectorizer_type": "TfidfVectorizer",
+        "classifier_type": "LinearSVC",
+        "input_text": "model_text + review_text + decision_text",
+        "train_rows": 16308,
+        "val_rows": 3495,
+        "test_rows": 3495,
+        "label_classes": [
+          "HIGH",
+          "LOW",
+          "MEDIUM"
+        ],
+        "vectorizer_params": {
+          "analyzer": "word",
+          "binary": false,
+          "decode_error": "strict",
+          "dtype": "<class 'numpy.float64'>",
+          "encoding": "utf-8",
+          "input": "content",
+          "lowercase": true,
+          "max_df": 0.95,
+          "max_features": 80000,
+          "min_df": 2,
+          "ngram_range": [
+            1,
+            2
+          ],
+          "norm": "l2",
+          "preprocessor": null,
+          "smooth_idf": true,
+          "stop_words": null,
+          "strip_accents": "unicode",
+          "sublinear_tf": true,
+          "token_pattern": "(?u)\\b\\w\\w+\\b",
+          "tokenizer": null,
+          "use_idf": true,
+          "vocabulary": null
+        },
+        "classifier_params": {
+          "C": 1.0,
+          "class_weight": "balanced",
+          "dual": "auto",
+          "fit_intercept": true,
+          "intercept_scaling": 1,
+          "loss": "squared_hinge",
+          "max_iter": 1000,
+          "multi_class": "ovr",
+          "penalty": "l2",
+          "random_state": 42,
+          "tol": 0.0001,
+          "verbose": 0
+        }
+      }
     }
-  ],
+  },
   "domains": {
     "ml": {
       "active_model_id": "tfidf_logreg_ml_20260413_142523",
       "model_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_ml_20260413_142523"
+    },
+    "all": {
+      "active_model_id": "tfidf_logreg_all_20260414_191800",
+      "model_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_all_20260414_191800"
     }
   },
-  "active_model": "tfidf_logreg_ml_20260413_142523",
-  "activeModelId": "tfidf_logreg_ml_20260413_142523",
-  "model_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_ml_20260413_142523"
+  "active_model": "tfidf_logreg_all_20260414_191800",
+  "activeModelId": "tfidf_logreg_all_20260414_191800",
+  "model_path": "E:\\PAPERSCOPE AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_all_20260414_191800",
+  "last_refreshed_at": "2026-04-14T22:39:32.650754+00:00"
 }

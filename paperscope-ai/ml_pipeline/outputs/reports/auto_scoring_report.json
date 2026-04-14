@@ -1,14 +1,39 @@
 {
   "schema_version": "2.0",
-  "rows_scored": 994,
+  "rows_scored": 1994,
   "feature_count": 13,
-  "avg_reproducibility_score": 50.735915492957744,
-  "avg_risk_score": 49.264084507042256,
+  "avg_reproducibility_score": 44.14744232698094,
+  "avg_risk_score": 55.85255767301906,
   "domain_stats": {
+    "biomed": {
+      "rows": 200,
+      "avg_reproducibility_score": 46.21,
+      "avg_risk_score": 53.79
+    },
+    "finance": {
+      "rows": 200,
+      "avg_reproducibility_score": 35.955,
+      "avg_risk_score": 64.045
+    },
+    "hardware": {
+      "rows": 200,
+      "avg_reproducibility_score": 48.205,
+      "avg_risk_score": 51.795
+    },
+    "math": {
+      "rows": 200,
+      "avg_reproducibility_score": 27.075,
+      "avg_risk_score": 72.925
+    },
     "ml": {
       "rows": 994,
       "avg_reproducibility_score": 50.735915492957744,
       "avg_risk_score": 49.264084507042256
+    },
+    "physics": {
+      "rows": 200,
+      "avg_reproducibility_score": 30.5475,
+      "avg_risk_score": 69.4525
     }
   },
   "weights_csv": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\feature_weights.csv",

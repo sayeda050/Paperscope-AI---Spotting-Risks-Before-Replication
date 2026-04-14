@@ -1,0 +1,42 @@
+{
+  "schema_version": "2.0",
+  "total_rows": 1994,
+  "domain_breakdown": [
+    {
+      "domain": "ml",
+      "rows": 994,
+      "found": true
+    },
+    {
+      "domain": "physics",
+      "rows": 200,
+      "found": true
+    },
+    {
+      "domain": "biomed",
+      "rows": 200,
+      "found": true
+    },
+    {
+      "domain": "nlp",
+      "rows": 0,
+      "found": false
+    },
+    {
+      "domain": "finance",
+      "rows": 200,
+      "found": true
+    },
+    {
+      "domain": "hardware",
+      "rows": 200,
+      "found": true
+    },
+    {
+      "domain": "math",
+      "rows": 200,
+      "found": true
+    }
+  ],
+  "output_file": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\extracted_text.jsonl"
+}

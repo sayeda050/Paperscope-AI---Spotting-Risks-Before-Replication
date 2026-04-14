@@ -1,9 +1,20 @@
+"""
+model_registry_service.py — ML model registry and prediction service.
+
+Fully backward-compatible with both:
+  - Old models (tfidf_logreg_auto_v2): 18 BASE_FEATURE_COLUMNS, 5-domain one-hot
+  - New models (tfidf_logreg_*_YYYYMMDD): 13 ATTRIBUTE_ORDER features, 7-domain one-hot,
+    CalibratedClassifierCV (isotonic), versioned latest.json routing
+
+The explicit feature columns and domain one-hot columns are read from each
+model's metadata.json at runtime, so the same code works for any model version.
+"""
 from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 
 import joblib
 import numpy as np
@@ -11,15 +22,24 @@ import pandas as pd
 import scipy.sparse as sp
 
 
-BACKEND_DIR = Path(__file__).resolve().parents[2]
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+BACKEND_DIR   = Path(__file__).resolve().parents[2]
 ML_ASSETS_DIR = BACKEND_DIR / "ml_assets"
-MODELS_DIR = ML_ASSETS_DIR / "models"
+MODELS_DIR    = ML_ASSETS_DIR / "models"
 REGISTRY_PATH = ML_ASSETS_DIR / "registry.json"
 
-_MODEL_CACHE = {}
+_MODEL_CACHE: dict = {}
 
 
-BASE_FEATURE_COLUMNS = [
+# ---------------------------------------------------------------------------
+# Feature column definitions
+# ---------------------------------------------------------------------------
+
+# Legacy 18 features (used by old models like tfidf_logreg_auto_v2).
+# Kept here so backward-compatible discovery still works.
+_LEGACY_BASE_FEATURE_COLUMNS: list[str] = [
     "has_code_link",
     "has_data_link",
     "has_hyperparams",
@@ -40,212 +60,180 @@ BASE_FEATURE_COLUMNS = [
     "review_insufficient_experiments",
 ]
 
-POSITIVE_FEATURES = BASE_FEATURE_COLUMNS[:10]
-NEGATIVE_FEATURES = BASE_FEATURE_COLUMNS[10:]
+# New 13 attributes — match ATTRIBUTE_ORDER in domain_config.py / train_tfidf_logreg.py
+NEW_ATTRIBUTE_ORDER: list[str] = [
+    "code_artifact",
+    "data_artifact",
+    "availability_statement",
+    "execution_instructions",
+    "hyperparams_detail",
+    "seed_disclosed",
+    "compute_detail",
+    "software_versions",
+    "evaluation_protocol",
+    "ablation",
+    "baseline_comparison",
+    "statistical_rigor",
+    "limitations",
+]
+
+# The 7 supported domains in the new pipeline (used for sorted one-hot columns)
+_NEW_SUPPORTED_DOMAINS: list[str] = [
+    "ml", "physics", "biomed", "nlp", "finance", "hardware", "math",
+]
+_NEW_DOMAIN_ONEHOT_COLS: list[str] = sorted(
+    f"dom_{d}" for d in _NEW_SUPPORTED_DOMAINS
+)
+# = ["dom_biomed", "dom_finance", "dom_hardware", "dom_math", "dom_ml", "dom_nlp", "dom_physics"]
+
+# Legacy 5-domain one-hot (sorted) — for old models
+_LEGACY_DOMAIN_ONEHOT_COLS: list[str] = sorted(
+    f"dom_{d}" for d in ["biomed", "econ", "finance", "math", "ml"]
+)
+
+LABEL_MAP = {
+    "NO":     "HIGH",
+    "YES":    "LOW",
+    "HIGH":   "HIGH",
+    "MEDIUM": "MEDIUM",
+    "LOW":    "LOW",
+}
+LABEL_ORDER = ["LOW", "MEDIUM", "HIGH"]
 
 
-POSITIVE_PATTERNS = {
+# ---------------------------------------------------------------------------
+# Regex patterns — kept identical to original for all services.py usage
+# ---------------------------------------------------------------------------
+POSITIVE_PATTERNS: dict[str, list[str]] = {
     "has_code_link": [
         r"github\.com", r"gitlab\.com", r"bitbucket\.org",
-        r"\bsource code\b", r"\bcode available\b", r"\bimplementation is available\b"
+        r"\bsource code\b", r"\bcode available\b", r"\bimplementation is available\b",
     ],
     "has_data_link": [
         r"\bdataset available\b", r"\bdata available\b", r"\bwe release the dataset\b",
-        r"\bkaggle\b", r"\bzenodo\b", r"\bhuggingface\b", r"\bdatasets can be found\b"
+        r"\bkaggle\b", r"\bzenodo\b", r"\bhuggingface\b", r"\bdatasets can be found\b",
     ],
     "has_hyperparams": [
         r"\blearning rate\b", r"\bbatch size\b", r"\bepochs?\b",
-        r"\bdropout\b", r"\boptimizer\b", r"\bweight decay\b", r"\bhidden size\b"
+        r"\bdropout\b", r"\boptimizer\b", r"\bweight decay\b", r"\bhidden size\b",
     ],
     "has_seed": [
-        r"\brandom seed\b", r"\bseed\s*=\s*\d+\b", r"\bwe use seed\b"
+        r"\brandom seed\b", r"\bseed\s*=\s*\d+\b", r"\bwe use seed\b",
     ],
     "has_env_details": [
         r"\bgpu\b", r"\bcuda\b", r"\bpytorch\b", r"\btensorflow\b",
-        r"\bubuntu\b", r"\bhardware\b", r"\bv100\b", r"\ba100\b"
+        r"\bubuntu\b", r"\bhardware\b", r"\bv100\b", r"\ba100\b",
     ],
     "has_metrics": [
         r"\baccuracy\b", r"\bf1\b", r"\bprecision\b", r"\brecall\b",
-        r"\bauc\b", r"\bbleu\b", r"\brouge\b", r"\bmse\b", r"\bmae\b", r"\bperplexity\b"
+        r"\bauc\b", r"\bbleu\b", r"\brouge\b", r"\bmse\b", r"\bmae\b", r"\bperplexity\b",
     ],
     "has_baselines": [
         r"\bbaseline\b", r"\bcompared with\b", r"\bcompare against\b",
-        r"\bstate[- ]of[- ]the[- ]art\b", r"\bsota\b"
+        r"\bstate[- ]of[- ]the[- ]art\b", r"\bsota\b",
     ],
     "has_ablation": [
-        r"\bablation\b", r"\bablative\b", r"\bremove each component\b"
+        r"\bablation\b", r"\bablative\b", r"\bremove each component\b",
     ],
     "has_limitations": [
-        r"\blimitations?\b", r"\bthreats to validity\b", r"\bfuture work\b"
+        r"\blimitations?\b", r"\bthreats to validity\b", r"\bfuture work\b",
     ],
     "has_statistical_tests": [
         r"\bp[- ]value\b", r"\bconfidence interval\b", r"\bstandard deviation\b",
-        r"\bstd\.?\b", r"\bvariance\b"
+        r"\bstd\.\b", r"\bstatistical significance\b",
     ],
 }
 
-NEGATIVE_PATTERNS = {
-    "review_missing_details": [
-        r"\bmissing details\b", r"\bnot enough details\b", r"\bunclear details\b",
-        r"\binsufficient detail\b", r"\bunder[- ]specified\b"
-    ],
-    "review_repro_concern": [
-        r"\breproducibility\b", r"\bhard to reproduce\b", r"\bdifficult to reproduce\b",
-        r"\bnot reproducible\b"
-    ],
-    "review_code_missing": [
-        r"\bno code\b", r"\bcode not provided\b", r"\bimplementation not available\b"
-    ],
-    "review_dataset_unclear": [
-        r"\bdataset unclear\b", r"\bdata preprocessing unclear\b", r"\bdata split unclear\b"
-    ],
-    "review_hyperparams_unclear": [
-        r"\bhyperparameters? (are )?unclear\b", r"\btraining details missing\b"
-    ],
-    "review_missing_ablation": [
-        r"\bno ablation\b", r"\blacks ablation\b", r"\bmissing ablation\b"
-    ],
-    "review_weak_baselines": [
-        r"\bweak baselines\b", r"\bmissing baseline\b", r"\binsufficient baseline\b"
-    ],
-    "review_insufficient_experiments": [
-        r"\binsufficient experiments\b", r"\bmore experiments needed\b", r"\blimited evaluation\b"
-    ],
+NEGATIVE_PATTERNS: dict[str, list[str]] = {
+    "review_missing_details":            [r"\bdetails are missing\b", r"\black of detail\b", r"\bnot enough detail\b"],
+    "review_repro_concern":              [r"\breproducibility\b", r"\bdifficult to reproduce\b", r"\bnot reproducible\b"],
+    "review_code_missing":               [r"\bcode is not available\b", r"\bno code\b", r"\bmissing implementation\b"],
+    "review_dataset_unclear":            [r"\bdataset is unclear\b", r"\bdata source is unclear\b", r"\bunclear dataset\b"],
+    "review_hyperparams_unclear":        [r"\bhyperparameters are unclear\b", r"\bmissing hyperparameters\b", r"\btraining details are unclear\b"],
+    "review_missing_ablation":           [r"\bno ablation\b", r"\bmissing ablation\b"],
+    "review_weak_baselines":             [r"\bweak baselines\b", r"\binsufficient baselines\b"],
+    "review_insufficient_experiments":   [r"\binsufficient experiments\b", r"\bmore experiments are needed\b"],
 }
 
-# Must match the corrected train_tfidf_logreg.py keyword flags exactly.
-TEXT_KEYWORD_FLAG_PATTERNS = {
-    "kw_code_link": re.compile(
-        r"github\.com/|gitlab\.com/|code\s+available|we\s+release\s+(?:the\s+)?code|open[- ]?source",
-        re.I,
-    ),
-    "kw_data_link": re.compile(
-        r"dataset\s+available|we\s+release\s+(?:the\s+)?data|huggingface\.co/|zenodo\.org/",
-        re.I,
-    ),
-    "kw_hyperparams": re.compile(
-        r"learning\s+rate|batch\s+size|epochs?|weight\s+decay|dropout|hyperparameter",
-        re.I,
-    ),
-    "kw_seed": re.compile(
-        r"random\s+seed|seed\s*=\s*\d+|seeded",
-        re.I,
-    ),
-    "kw_uncertainty": re.compile(
-        r"standard\s+deviation|confidence\s+interval|error\s+bar|±|\u00b1|p[- ]value",
-        re.I,
-    ),
-    "kw_compute": re.compile(
-        r"\bgpu\b|v100|a100|cuda|training\s+time|compute\s+(?:budget|hours?)",
-        re.I,
-    ),
-    "kw_ablation": re.compile(
-        r"ablation\s+stud(?:y|ies)|we\s+ablate",
-        re.I,
-    ),
-    "kw_baselines": re.compile(
-        r"baseline|compared\s+(?:with|to|against)|state[- ]of[- ]the[- ]art|sota",
-        re.I,
-    ),
-    "kw_limitations": re.compile(
-        r"limitations?|threats\s+to\s+validity|future\s+work|bias",
-        re.I,
-    ),
-    "kw_stat_tests": re.compile(
-        r"wilcoxon|t-test|anova|bootstrap|significance|confidence\s+interval",
-        re.I,
-    ),
-}
-
-ML_RE = re.compile(
-    r"\b(machine learning|deep learning|neural network|transformer|classifier|regression|feature selection|genetic algorithm|optimization)\b",
+# Extra patterns for new attribute features
+_EXECUTION_RE = re.compile(
+    r"\bpip install\b|\bconda install\b|\brequirements\.txt\b|"
+    r"\bDockerfile\b|\bdocker\b|\bhow to run\b|\bto reproduce\b|"
+    r"\breproduc.*package\b|\bREADME\b|\binstall.*instructions\b|"
+    r"\bSnakefile\b|\bNextflow\b|\bSnakemake\b|"
+    r"\brun\.sh\b|\btrain\.sh\b|\bscript.*available\b",
     re.I,
 )
-LLM_RE = re.compile(
-    r"\b(llm|large language model|large language models|gpt-4|gpt-3\.5|claude|llama|gemini|mistral)\b",
+_SOFTWARE_VERSIONS_RE = re.compile(
+    r"\bPython\s+\d+\.\d+\b|\bPyTorch\s+\d+\.\d+\b|\bTensorFlow\s+\d+\.\d+\b|"
+    r"\bscikit[- ]learn\s+\d+\.\d+\b|\bCUDA\s+\d+\.\d+\b|"
+    r"\bR\s+version\s+\d+\.\d+\b|\bMatlab\s+R?\d{4}\b|"
+    r"\bGeant4\b|\bROOT\s+\d+\b|\bPythia\s+\d+\b|"
+    r"\brequirements\.txt\b|\bDockerfile\b",
     re.I,
 )
-HDL_RE = re.compile(
-    r"\b(verilog|rtl|hdl|hardware|synthesis|testbench|compiler|simulator|simulation toolchain)\b",
-    re.I,
-)
-BIOMED_RE = re.compile(
-    r"\b(omics|multi-omic|multi-omics|gene|genomic|transcriptomic|mirna|mrna|biomarker|cancer|patient|cohort|survival analysis|clinical)\b",
-    re.I,
-)
-FINANCE_RE = re.compile(
-    r"\b(option pricing|black[- ]scholes|heston|garch|jump diffusion|merton|strike price|implied volatility|financial market|call option|put option)\b",
-    re.I,
-)
-LIVE_DATA_RE = re.compile(
-    r"\b(live market data|fetched at the time of execution|obtained .* at the time of execution|live data)\b",
-    re.I,
-)
-THEOREM_RE = re.compile(r"\b(theorem|lemma|corollary|proposition|claim|proof)\b", re.I)
-ALGORITHM_RE = re.compile(r"\balgorithm\s+\d+\b", re.I)
-TABLE_RE = re.compile(r"\btable\s+[ivxlcdm0-9]+\b", re.I)
-EQUATION_ID_RE = re.compile(r"\(\d+\)")
-AVAILABILITY_SECTION_RE = re.compile(
-    r"\b(data and source code availability|data availability|code availability|availability of data and materials|software availability)\b",
-    re.I,
-)
-PUBLIC_DATA_RE = re.compile(
-    r"\b(tcga|geo|sra|dbgap|uk biobank|seer|physionet|mimic|kaggle|uci|openml|yahoo finance|public dataset|public repository|public repositories)\b",
-    re.I,
-)
-ARTIFACT_PACKAGE_RE = re.compile(
-    r"\b(docker|requirements\.txt|conda|environment\.yml|replication package|artifact package|supplementary artifact|supplementary material)\b",
-    re.I,
-)
-EXECUTION_RE = re.compile(
-    r"\b(readme|installation|install(ation)? instructions|how to run|run the code|command line|cli|scripts are available|reproducible workflow|implementation available)\b",
+_AVAILABILITY_CONFIRMED_RE = re.compile(
+    r"github\.com/|gitlab\.com/|zenodo\.org/|figshare\.com/|"
+    r"huggingface\.co/|osf\.io/|codeocean\.com/|"
+    r"\bcode (?:is|has been|was)\s*(?:available|released|shared|provided)\b|"
+    r"\bdata (?:is|are|has been|was)\s*(?:available|released|shared|provided)\b|"
+    r"\bartifact(?:s)? (?:are|is)\s*(?:available|released|shared|provided)\b|"
+    r"\bGEO accession\b|\bSRA accession\b|\bPDB ID\b|\bhepdata\.net\b",
     re.I,
 )
 
-DEFAULT_SCORE_FEATURE_COLUMNS = [
-    "prob_yes",
-    "prob_no",
-    "top_class_probability",
-    "prediction_is_yes",
-    "prediction_is_no",
-    "has_code_link",
-    "has_data_link",
-    "has_hyperparams",
-    "has_seed",
-    "has_env_details",
-    "has_metrics",
-    "has_baselines",
-    "has_ablation",
-    "has_limitations",
-    "has_statistical_tests",
-    "title_len",
-    "abstract_len",
-    "model_text_len",
-    "model_text_len_k",
-    "num_positive_indicators",
-    "positive_per_1000_model_chars",
-    "has_code_and_data",
-    "has_hyperparams_and_seed",
-    "baselines_and_ablation",
-    "metrics_and_stats",
-    "has_availability_section",
-    "has_public_data",
-    "has_artifact_package",
-    "has_execution_instructions",
-    "has_live_runtime_data",
-    "equation_count",
-    "algorithm_count",
-    "table_count",
-    "theorem_count",
-    "is_ml",
-    "is_llm",
-    "is_hdl",
-    "is_biomed",
-    "is_finance",
-]
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def _coerce_text(value) -> str:
+    return str(value or "").strip()
 
 
-def safe_read_json(path: Path, default):
+def _normalize_label(value: str) -> str:
+    text = _coerce_text(value).upper()
+    return LABEL_MAP.get(text, text or "MEDIUM")
+
+
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        if value is None or value == "":
+            return float(default)
+        return float(value)
+    except Exception:
+        return float(default)
+
+
+def _clip_score(value) -> float:
+    return float(max(0.0, min(100.0, _safe_float(value, 50.0))))
+
+
+def label_from_score(score: float) -> str:
+    score = _clip_score(score)
+    if score >= 70:
+        return "LOW"
+    if score >= 40:
+        return "MEDIUM"
+    return "HIGH"
+
+
+def _extract_probability_map(model, matrix, class_labels: list[str]) -> dict[str, float]:
+    if hasattr(model, "predict_proba"):
+        probs = model.predict_proba(matrix)[0]
+        return {
+            str(class_labels[i]): float(probs[i])
+            for i in range(min(len(class_labels), len(probs)))
+        }
+    predicted      = model.predict(matrix)[0]
+    predicted_label = _normalize_label(predicted)
+    return {label: (1.0 if label == predicted_label else 0.0) for label in class_labels}
+
+
+def _ensure_directory(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def _read_json(path: Path, default):
     if not path.exists():
         return default
     try:
@@ -254,657 +242,800 @@ def safe_read_json(path: Path, default):
         return default
 
 
-def write_json(path: Path, payload):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
-
-def clear_model_cache():
-    _MODEL_CACHE.clear()
-
-
-def clean_text(text):
-    return " ".join(str(text or "").split()).strip()
-
-
-def has_any_pattern(text: str, patterns):
-    text = text or ""
-    for pattern in patterns:
-        if re.search(pattern, text, flags=re.I):
-            return 1.0
-    return 0.0
-
-
-def build_default_model_text(payload):
-    model_text = clean_text(payload.get("model_text", ""))
-    if model_text:
-        return model_text
-
-    title = clean_text(payload.get("title", ""))
-    abstract = clean_text(payload.get("abstract", ""))
-    return clean_text(f"{title}. {abstract}")
-
-
-def build_text_input(payload, metadata):
-    base_text = build_default_model_text(payload)
-    review_text = clean_text(payload.get("review_text", ""))
-    decision_text = clean_text(payload.get("decision_text", ""))
-
-    input_hint = str(metadata.get("input_text", "")).lower()
-    if "review_text" in input_hint or "decision_text" in input_hint:
-        return clean_text(f"{base_text} [REVIEW] {review_text} [DECISION] {decision_text}")
-
-    return base_text
-
-
-def _build_text_keyword_flags(texts: list[str]) -> np.ndarray:
-    n = len(texts)
-    k = len(TEXT_KEYWORD_FLAG_PATTERNS)
-    X = np.zeros((n, k), dtype=np.float32)
-    for j, pattern in enumerate(TEXT_KEYWORD_FLAG_PATTERNS.values()):
-        for i, text in enumerate(texts):
-            X[i, j] = 1.0 if pattern.search(text or "") else 0.0
-    return X
-
-
-def build_text_model_matrix(texts: list[str], vectorizer, metadata: dict):
-    X_tfidf = vectorizer.transform(texts)
-
-    feature_engineering = str(metadata.get("feature_engineering", "")).lower()
-    keyword_names = metadata.get("keyword_flag_names") or metadata.get("keyword_flags") or []
-
-    uses_keyword_flags = ("keyword" in feature_engineering) or bool(keyword_names)
-    if not uses_keyword_flags:
-        return X_tfidf
-
-    X_kw = _build_text_keyword_flags(texts)
-    return sp.hstack([X_tfidf, sp.csr_matrix(X_kw)], format="csr")
-
-
-def compute_base_feature_flags(payload):
-    model_text = build_default_model_text(payload)
-    review_text = clean_text(payload.get("review_text", ""))
-    decision_text = clean_text(payload.get("decision_text", ""))
-    reviewer_signal_text = clean_text(f"{review_text} {decision_text}")
-
-    feats = {}
-    for key, patterns in POSITIVE_PATTERNS.items():
-        feats[key] = has_any_pattern(model_text, patterns)
-    for key, patterns in NEGATIVE_PATTERNS.items():
-        feats[key] = has_any_pattern(reviewer_signal_text, patterns)
-    return feats
-
-
-def build_base_feature_frame(payload, feature_columns):
-    row = compute_base_feature_flags(payload)
-    df = pd.DataFrame([row])
-
-    for col in feature_columns:
-        if col not in df.columns:
-            df[col] = 0.0
-
-    df = df[feature_columns].copy()
-    for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).astype(float)
-    return df
-
-
-def safe_text_len(value):
-    return float(len(str(value or "")))
-
-
-def build_rich_feature_frame(payload, feature_columns):
-    row = compute_base_feature_flags(payload)
-
-    title = payload.get("title", "")
-    abstract = payload.get("abstract", "")
-    model_text = build_default_model_text(payload)
-    review_text = payload.get("review_text", "")
-    decision_text = payload.get("decision_text", "")
-    venue = str(payload.get("venue", "") or "")
-    year_raw = payload.get("year", 0)
-    review_count_raw = payload.get("review_count", 0)
-
-    try:
-        year_num = float(year_raw)
-    except Exception:
-        year_num = 0.0
-
-    try:
-        review_count = float(review_count_raw)
-    except Exception:
-        review_count = 0.0
-
-    row["title_len"] = safe_text_len(title)
-    row["abstract_len"] = safe_text_len(abstract)
-    row["model_text_len"] = safe_text_len(model_text)
-    row["review_text_len"] = safe_text_len(review_text)
-    row["decision_text_len"] = safe_text_len(decision_text)
-    row["review_count"] = review_count
-
-    row["num_positive_indicators"] = float(sum(row.get(k, 0.0) for k in POSITIVE_FEATURES))
-    row["num_negative_indicators"] = float(sum(row.get(k, 0.0) for k in NEGATIVE_FEATURES))
-    row["positive_minus_negative"] = row["num_positive_indicators"] - row["num_negative_indicators"]
-    row["positive_plus_negative"] = row["num_positive_indicators"] + row["num_negative_indicators"]
-    row["positive_to_total_ratio"] = (
-        row["num_positive_indicators"] / row["positive_plus_negative"]
-        if row["positive_plus_negative"] > 0 else 0.0
-    )
-
-    row["has_code_and_data"] = row.get("has_code_link", 0.0) * row.get("has_data_link", 0.0)
-    row["has_hyperparams_and_seed"] = row.get("has_hyperparams", 0.0) * row.get("has_seed", 0.0)
-    row["repro_concern_and_missing_details"] = (
-        row.get("review_repro_concern", 0.0) * row.get("review_missing_details", 0.0)
-    )
-    row["baselines_and_ablation"] = row.get("has_baselines", 0.0) * row.get("has_ablation", 0.0)
-    row["metrics_and_stats"] = row.get("has_metrics", 0.0) * row.get("has_statistical_tests", 0.0)
-
-    row["positive_per_1000_model_chars"] = (
-        1000.0 * row["num_positive_indicators"] / row["model_text_len"]
-        if row["model_text_len"] > 0 else 0.0
-    )
-    row["negative_per_1000_review_chars"] = (
-        1000.0 * row["num_negative_indicators"] / row["review_text_len"]
-        if row["review_text_len"] > 0 else 0.0
-    )
-
-    row["year_num"] = year_num
-    row["venue_iclr_2025"] = 1.0 if venue == "ICLR.cc/2025/Conference" else 0.0
-    row["venue_iclr_2024"] = 1.0 if venue == "ICLR.cc/2024/Conference" else 0.0
-    row["venue_neurips_2024"] = 1.0 if venue == "NeurIPS.cc/2024/Conference" else 0.0
-
-    df = pd.DataFrame([row])
-
-    for col in feature_columns:
-        if col not in df.columns:
-            df[col] = 0.0
-
-    df = df[feature_columns].copy()
-    for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).astype(float)
-    return df
-
-
-def _count_pattern_matches(text: str, pattern) -> float:
-    text = text or ""
-    return float(len(pattern.findall(text)))
-
-
-def _normalize_probabilities(probabilities: dict | None):
-    probabilities = probabilities or {}
-    upper_probs = {str(k).upper(): float(v) for k, v in probabilities.items()}
-
-    yes = upper_probs.get("YES")
-    no = upper_probs.get("NO")
-
-    if yes is None and no is not None:
-        yes = 1.0 - no
-    if no is None and yes is not None:
-        no = 1.0 - yes
-
-    if yes is None:
-        yes = 0.0
-    if no is None:
-        no = 0.0
-
-    top_class_probability = max(upper_probs.values()) if upper_probs else 0.0
-    return yes, no, float(top_class_probability)
-
-
-def build_score_feature_row(payload, prediction):
-    payload = payload or {}
-    prediction = prediction or {}
-
-    row = compute_base_feature_flags(payload)
-
-    title = clean_text(payload.get("title", ""))
-    abstract = clean_text(payload.get("abstract", ""))
-    model_text = build_default_model_text(payload)
-    combined = clean_text(f"{title} {abstract} {model_text}")
-
-    prob_yes, prob_no, top_class_probability = _normalize_probabilities(prediction.get("probabilities"))
-    pred_label = str(prediction.get("prediction", "")).strip().upper()
-
-    row["prob_yes"] = float(prob_yes)
-    row["prob_no"] = float(prob_no)
-    row["top_class_probability"] = float(top_class_probability)
-    row["prediction_is_yes"] = 1.0 if pred_label == "YES" else 0.0
-    row["prediction_is_no"] = 1.0 if pred_label == "NO" else 0.0
-
-    row["title_len"] = safe_text_len(title)
-    row["abstract_len"] = safe_text_len(abstract)
-    row["model_text_len"] = safe_text_len(model_text)
-    row["model_text_len_k"] = row["model_text_len"] / 1000.0 if row["model_text_len"] > 0 else 0.0
-
-    row["num_positive_indicators"] = float(sum(row.get(k, 0.0) for k in POSITIVE_FEATURES))
-    row["positive_per_1000_model_chars"] = (
-        1000.0 * row["num_positive_indicators"] / row["model_text_len"]
-        if row["model_text_len"] > 0 else 0.0
-    )
-
-    row["has_code_and_data"] = row.get("has_code_link", 0.0) * row.get("has_data_link", 0.0)
-    row["has_hyperparams_and_seed"] = row.get("has_hyperparams", 0.0) * row.get("has_seed", 0.0)
-    row["baselines_and_ablation"] = row.get("has_baselines", 0.0) * row.get("has_ablation", 0.0)
-    row["metrics_and_stats"] = row.get("has_metrics", 0.0) * row.get("has_statistical_tests", 0.0)
-
-    row["has_availability_section"] = 1.0 if AVAILABILITY_SECTION_RE.search(combined) else 0.0
-    row["has_public_data"] = 1.0 if PUBLIC_DATA_RE.search(combined) else 0.0
-    row["has_artifact_package"] = 1.0 if ARTIFACT_PACKAGE_RE.search(combined) else 0.0
-    row["has_execution_instructions"] = 1.0 if EXECUTION_RE.search(combined) else 0.0
-    row["has_live_runtime_data"] = 1.0 if LIVE_DATA_RE.search(combined) else 0.0
-
-    row["equation_count"] = _count_pattern_matches(combined, EQUATION_ID_RE)
-    row["algorithm_count"] = _count_pattern_matches(combined, ALGORITHM_RE)
-    row["table_count"] = _count_pattern_matches(combined, TABLE_RE)
-    row["theorem_count"] = _count_pattern_matches(combined, THEOREM_RE)
-
-    row["is_ml"] = 1.0 if ML_RE.search(combined) else 0.0
-    row["is_llm"] = 1.0 if LLM_RE.search(combined) else 0.0
-    row["is_hdl"] = 1.0 if HDL_RE.search(combined) else 0.0
-    row["is_biomed"] = 1.0 if BIOMED_RE.search(combined) else 0.0
-    row["is_finance"] = 1.0 if FINANCE_RE.search(combined) else 0.0
-
-    return row
-
-
-def build_score_feature_frame(payload, prediction, feature_columns=None):
-    if not feature_columns:
-        feature_columns = DEFAULT_SCORE_FEATURE_COLUMNS
-
-    row = build_score_feature_row(payload, prediction)
-    df = pd.DataFrame([row])
-
-    for col in feature_columns:
-        if col not in df.columns:
-            df[col] = 0.0
-
-    df = df[list(feature_columns)].copy()
-    for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).astype(float)
-    return df
-
-
-def _patch_classifier_for_runtime_compatibility(classifier):
-    class_name = classifier.__class__.__name__
-
-    if class_name == "LogisticRegression":
-        if not hasattr(classifier, "multi_class"):
-            classifier.multi_class = "auto"
-        if not hasattr(classifier, "n_jobs"):
-            classifier.n_jobs = None
-        if not hasattr(classifier, "l1_ratio"):
-            classifier.l1_ratio = None
-
-    elif class_name in {"LinearSVC", "SVC"}:
-        if not hasattr(classifier, "break_ties"):
-            classifier.break_ties = False
-
-    return classifier
-
-
-def _guess_pipeline_type(model_dir: Path, metadata: dict) -> str:
-    if (model_dir / "vectorizer.joblib").exists():
-        return "text_input_v1"
-
-    input_type = str(metadata.get("input_type", "")).lower()
-    if "rich" in input_type:
-        return "feature_rich_v1"
-
-    return "feature_base_v1"
-
-
-def _extract_metric(train_report: dict, key_path):
-    cur = train_report
-    for key in key_path:
-        if not isinstance(cur, dict) or key not in cur:
-            return None
-        cur = cur[key]
-    try:
-        return float(cur)
-    except Exception:
-        return None
-
-
-def _extract_metrics(model_dir: Path):
-    train_report = safe_read_json(model_dir / "train_report.json", {})
-
-    test_acc = (
-        _extract_metric(train_report, ["test", "accuracy"])
-        or _extract_metric(train_report, ["test_final_model", "accuracy"])
-        or _extract_metric(train_report, ["best_validation_selection", "val_accuracy"])
-        or _extract_metric(train_report, ["validation", "accuracy"])
-        or _extract_metric(train_report, ["validation_selected_model", "accuracy"])
-    )
-
-    test_f1 = (
-        _extract_metric(train_report, ["test", "macro_f1"])
-        or _extract_metric(train_report, ["test_final_model", "macro_f1"])
-        or _extract_metric(train_report, ["best_validation_selection", "val_macro_f1"])
-        or _extract_metric(train_report, ["validation", "macro_f1"])
-        or _extract_metric(train_report, ["validation_selected_model", "macro_f1"])
-    )
-
+def _write_json(path: Path, payload) -> None:
+    _ensure_directory(path.parent)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Registry I/O — handles both old (dict) and new (list) models formats
+# ---------------------------------------------------------------------------
+def _registry_template() -> dict:
     return {
-        "testAccuracy": test_acc,
-        "macroF1": test_f1,
+        "active_model":       None,
+        "models":             {},
+        "last_refreshed_at":  None,
     }
 
 
-def _format_created_at(model_dir: Path, metadata: dict):
-    value = metadata.get("created_at")
-    if value:
-        return str(value)
+def _read_registry() -> dict:
+    """
+    Read registry.json and normalize to internal format:
+      {"active_model": str, "models": {model_key: entry_dict}, ...}
 
-    try:
-        ts = model_dir.stat().st_mtime
-        return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
-    except Exception:
-        return ""
+    New pipeline writes models as a list; old pipeline wrote a dict.
+    Both are handled transparently.
+    """
+    payload = _read_json(REGISTRY_PATH, _registry_template())
+    if not isinstance(payload, dict):
+        payload = _registry_template()
 
-
-def _discover_models_from_disk():
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
-
-    models = []
-    for child in MODELS_DIR.iterdir():
-        if not child.is_dir():
-            continue
-
-        metadata = safe_read_json(child / "metadata.json", {})
-        pipeline_type = _guess_pipeline_type(child, metadata)
-
-        model_name = metadata.get("model_name") or child.name
-        classifier_type = metadata.get("classifier_type", "")
-        vectorizer_type = metadata.get("vectorizer_type", "")
-        model_type = " + ".join([x for x in [vectorizer_type, classifier_type] if x]) or child.name
-
-        status = "ready"
-        if not (child / "classifier.joblib").exists() or not (child / "label_encoder.joblib").exists():
-            status = "missing_artifacts"
-
-        if pipeline_type == "text_input_v1" and not (child / "vectorizer.joblib").exists():
-            status = "missing_artifacts"
-
-        models.append(
-            {
-                "id": child.name,
-                "name": model_name,
-                "artifactSubdir": child.name,
-                "modelType": model_type,
-                "pipelineType": pipeline_type,
-                "createdAt": _format_created_at(child, metadata),
-                "metrics": _extract_metrics(child),
-                "status": status,
-                "active": False,
-            }
+    # Normalize active_model key (new format uses "activeModelId" as alias)
+    if not payload.get("active_model"):
+        payload["active_model"] = (
+            payload.get("activeModelId")
+            or payload.get("active_model")
         )
 
-    models.sort(key=lambda x: x["name"].lower())
+    # Normalize models: new format is a list, old is a dict
+    raw_models = payload.get("models", {})
+    if isinstance(raw_models, list):
+        models_dict: dict = {}
+        for m in raw_models:
+            if isinstance(m, dict) and m.get("id"):
+                models_dict[m["id"]] = m
+        payload["models"] = models_dict
+
+    payload.setdefault("active_model",      None)
+    payload.setdefault("models",            {})
+    payload.setdefault("last_refreshed_at", None)
+    return payload
+
+
+def _write_registry(payload: dict) -> dict:
+    payload["last_refreshed_at"] = datetime.now(timezone.utc).isoformat()
+    _write_json(REGISTRY_PATH, payload)
+    return payload
+
+
+# ---------------------------------------------------------------------------
+# Model discovery — works for both versioned and non-versioned dirs
+# ---------------------------------------------------------------------------
+def _discover_model_entry(model_dir: Path) -> dict | None:
+    """
+    Discover a model from a directory. Returns None if the directory is not
+    a valid model (e.g., domain sub-folder like ml/ or all/).
+    """
+    if not model_dir.is_dir():
+        return None
+
+    # New versioned structure: outputs/models/{domain}/{run_id}/
+    # The ML pipeline exports flat into ml_assets/models/{model_id}/
+    # So we only need to check direct children of MODELS_DIR.
+
+    metadata_path              = model_dir / "metadata.json"
+    vectorizer_path            = model_dir / "vectorizer.joblib"
+    classifier_path            = model_dir / "classifier.joblib"
+    label_encoder_path         = model_dir / "label_encoder.joblib"
+    score_calibrator_path      = model_dir / "score_calibrator.joblib"
+    score_feature_columns_path = model_dir / "score_feature_columns.json"
+
+    if not vectorizer_path.exists() or not classifier_path.exists():
+        return None
+
+    metadata     = _read_json(metadata_path, {})
+    model_key    = model_dir.name
+    display_name = metadata.get("display_name") or model_key
+    created_at   = metadata.get("created_at") or metadata.get("run_id")
+
+    return {
+        "model_key":                  model_key,
+        "display_name":               display_name,
+        "domain":                     metadata.get("domain", "ml"),
+        "run_id":                     metadata.get("run_id", ""),
+        "model_dir":                  str(model_dir),
+        "vectorizer_path":            str(vectorizer_path),
+        "classifier_path":            str(classifier_path),
+        "label_encoder_path":         str(label_encoder_path) if label_encoder_path.exists() else None,
+        "score_calibrator_path":      str(score_calibrator_path) if score_calibrator_path.exists() else None,
+        "score_feature_columns_path": str(score_feature_columns_path) if score_feature_columns_path.exists() else None,
+        "metadata_path":              str(metadata_path) if metadata_path.exists() else None,
+        "created_at":                 created_at,
+        "metadata":                   metadata,
+    }
+
+
+def refresh_registry_from_disk() -> dict:
+    """Scan MODELS_DIR, discover valid models, update registry.json."""
+    registry   = _read_registry()
+    discovered: dict = {}
+
+    _ensure_directory(MODELS_DIR)
+
+    for child in sorted(MODELS_DIR.iterdir()):
+        entry = _discover_model_entry(child)
+        if entry is not None:
+            discovered[entry["model_key"]] = entry
+
+    registry["models"] = discovered
+
+    active_key = registry.get("active_model")
+    if active_key not in discovered:
+        registry["active_model"] = next(iter(discovered.keys()), None)
+
+    return _write_registry(registry)
+
+
+def list_models() -> list[dict]:
+    registry   = refresh_registry_from_disk()
+    active_key = registry.get("active_model")
+    models     = []
+    for key, entry in registry.get("models", {}).items():
+        item            = dict(entry)
+        item["is_active"] = (key == active_key)
+        models.append(item)
     return models
 
 
-def load_registry():
-    registry = safe_read_json(REGISTRY_PATH, {})
-    active_id = registry.get("activeModelId") or registry.get("active_model")
-    return {
-        "activeModelId": active_id,
-        "raw": registry,
+def get_active_model() -> dict | None:
+    registry   = refresh_registry_from_disk()
+    active_key = registry.get("active_model")
+    if not active_key:
+        return None
+    return registry.get("models", {}).get(active_key)
+
+
+def set_active_model(model_key: str) -> dict:
+    model_key = _coerce_text(model_key)
+    if not model_key:
+        raise ValueError("model_key is required.")
+    registry = refresh_registry_from_disk()
+    if model_key not in registry.get("models", {}):
+        raise ValueError(f"Model '{model_key}' was not found in backend/ml_assets/models.")
+    registry["active_model"] = model_key
+    return _write_registry(registry)
+
+
+# ---------------------------------------------------------------------------
+# Model / artifact caching
+# ---------------------------------------------------------------------------
+def _cache_key(model_key: str, suffix: str) -> str:
+    return f"{model_key}::{suffix}"
+
+
+def _load_joblib_cached(path: str | None, cache_key: str):
+    if not path:
+        return None
+    if cache_key in _MODEL_CACHE:
+        return _MODEL_CACHE[cache_key]
+    obj = joblib.load(path)
+    _MODEL_CACHE[cache_key] = obj
+    return obj
+
+
+def _load_json_cached(path: str | None, cache_key: str, default):
+    if not path:
+        return default
+    if cache_key in _MODEL_CACHE:
+        return _MODEL_CACHE[cache_key]
+    payload = _read_json(Path(path), default)
+    _MODEL_CACHE[cache_key] = payload
+    return payload
+
+
+# ---------------------------------------------------------------------------
+# Per-model feature metadata helpers
+# (Reads from metadata.json so old and new models both work correctly)
+# ---------------------------------------------------------------------------
+def _is_legacy_model(active_model: dict, metadata: dict) -> bool:
+    model_key = _coerce_text(active_model.get("model_key"))
+
+    if model_key == "tfidf_logreg_auto_v2":
+        return True
+
+    if metadata.get("explicit_feature_names") or metadata.get("explicit_feature_columns"):
+        return False
+    if metadata.get("domain_onehot_features"):
+        return False
+
+    if metadata.get("run_id") or metadata.get("domain") in _NEW_SUPPORTED_DOMAINS:
+        return False
+
+    return model_key.startswith("tfidf_logreg_auto")
+
+
+def _get_explicit_feature_columns(active_model: dict) -> list[str]:
+    """
+    Return the explicit feature column names this model was trained with.
+
+    New exported models should store this in metadata["explicit_feature_names"],
+    but some exported folders only contain score-calibrator metadata and miss
+    this key. In that case we must still default to the NEW 13-column schema
+    for all new tfidf_logreg_<domain>_<runid> models.
+    """
+    metadata = _load_json_cached(
+        active_model.get("metadata_path"),
+        _cache_key(active_model["model_key"], "metadata"),
+        {},
+    )
+    cols = metadata.get("explicit_feature_names") or metadata.get("explicit_feature_columns")
+    if cols and isinstance(cols, list) and len(cols) > 0:
+        return cols
+    if _is_legacy_model(active_model, metadata):
+        return _LEGACY_BASE_FEATURE_COLUMNS
+    return NEW_ATTRIBUTE_ORDER
+
+
+def _get_domain_onehot_cols(active_model: dict) -> list[str]:
+    """
+    Return the sorted domain one-hot column names this model was trained with.
+
+    New exported models should store this in metadata["domain_onehot_features"],
+    but if that key is missing we must still use the NEW 7-domain schema for
+    new all-domain models.
+    """
+    metadata = _load_json_cached(
+        active_model.get("metadata_path"),
+        _cache_key(active_model["model_key"], "metadata"),
+        {},
+    )
+    cols = metadata.get("domain_onehot_features")
+    if cols and isinstance(cols, list) and len(cols) > 0:
+        return cols
+    if _is_legacy_model(active_model, metadata):
+        return _LEGACY_DOMAIN_ONEHOT_COLS
+    return _NEW_DOMAIN_ONEHOT_COLS
+
+
+def _load_label_encoder_classes(active_model: dict) -> list[str]:
+    """Load class labels and normalize to LABEL_MAP values."""
+    model_key = active_model["model_key"]
+    encoder   = _load_joblib_cached(
+        active_model.get("label_encoder_path"),
+        _cache_key(model_key, "label_encoder"),
+    )
+    if encoder is not None and hasattr(encoder, "classes_"):
+        return [_normalize_label(label) for label in list(encoder.classes_)]
+
+    metadata = _load_json_cached(
+        active_model.get("metadata_path"),
+        _cache_key(model_key, "metadata"),
+        {},
+    )
+    raw_labels = (
+        metadata.get("class_labels")
+        or metadata.get("class_names")
+        or metadata.get("labels")
+        or LABEL_ORDER
+    )
+    labels  = [_normalize_label(label) for label in raw_labels]
+    deduped: list[str] = []
+    for label in labels:
+        if label not in deduped:
+            deduped.append(label)
+    return deduped or LABEL_ORDER
+
+
+# ---------------------------------------------------------------------------
+# Domain helpers
+# ---------------------------------------------------------------------------
+def _extract_domain(value) -> str:
+    raw = _coerce_text(value).lower()
+    # Map aliases to canonical names used in domain_config.SUPPORTED_DOMAINS
+    _alias_map = {
+        "machine learning":  "ml",
+        "deep learning":     "ml",
+        "artificial intelligence": "ml",
+        "biomedical":        "biomed",
+        "biology":           "biomed",
+        "economics":         "finance",
+        "econ":              "finance",
+        "hardware":          "hardware",
+        "computer architecture": "hardware",
+        "natural language":  "nlp",
+        "computational linguistics": "nlp",
+        "mathematics":       "math",
     }
+    return _alias_map.get(raw, raw) or "ml"
 
 
-def save_registry(active_id: str, models: list[dict]):
-    active_model_path = str(MODELS_DIR / active_id) if active_id else ""
-
-    payload = {
-        "active_model": active_id,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "available_models": [m["id"] for m in models],
-        "model_path": active_model_path,
-        "activeModelId": active_id,
-        "models": models,
-    }
-    write_json(REGISTRY_PATH, payload)
+def _domain_onehot_matrix(domain: str, domain_cols: list[str]) -> sp.csr_matrix:
+    """Build domain one-hot matrix matching the column list from model metadata."""
+    canonical = _extract_domain(domain)
+    target    = f"dom_{canonical}"
+    vector    = [1.0 if col == target else 0.0 for col in domain_cols]
+    return sp.csr_matrix(np.asarray([vector], dtype=float))
 
 
-def list_models():
-    registry = load_registry()
-    active_id = registry["activeModelId"]
+# ---------------------------------------------------------------------------
+# Feature flag computation
+# ---------------------------------------------------------------------------
+def compute_base_feature_flags(payload: dict) -> dict[str, float]:
+    """
+    Compute all reproducibility feature flags from paper text.
 
-    models = _discover_models_from_disk()
-    for model in models:
-        model["active"] = model["id"] == active_id
+    Returns a union of:
+    - Legacy flags (has_code_link, has_data_link, ...) — for services.py signals
+    - New 13 attribute flags (code_artifact, data_artifact, ...) — for new ML classifier
+    """
+    model_text    = _compose_model_text(payload).lower()
+    review_text   = _coerce_text(payload.get("review_text")).lower()
+    decision_text = _coerce_text(payload.get("decision_text")).lower()
+    review_bundle = f"{review_text}\n{decision_text}".strip()
 
-    if not active_id and models:
-        models[0]["active"] = True
-        active_id = models[0]["id"]
-        save_registry(active_id, models)
+    flags: dict[str, float] = {}
 
-    models.sort(key=lambda x: (not x.get("active", False), x.get("name", "").lower()))
-    return models
+    # ── Legacy positive flags (services.py uses these) ──────────────────────
+    for feature_name, patterns in POSITIVE_PATTERNS.items():
+        flags[feature_name] = (
+            1.0 if any(re.search(p, model_text, re.I) for p in patterns) else 0.0
+        )
 
+    # ── Legacy negative flags (services.py uses these) ──────────────────────
+    for feature_name, patterns in NEGATIVE_PATTERNS.items():
+        flags[feature_name] = (
+            1.0 if any(re.search(p, review_bundle, re.I) for p in patterns) else 0.0
+        )
 
-def refresh_registry_from_disk():
-    clear_model_cache()
-    models = list_models()
-    active = next((m["id"] for m in models if m.get("active")), None)
-    save_registry(active, models)
-    return models
+    # ── New 13 ATTRIBUTE_ORDER flags (new ML classifier uses these) ──────────
+    # code_artifact: confirmed code URL or "code available" statement
+    code_url_hit = bool(re.search(
+        r"github\.com/|gitlab\.com/|bitbucket\.org/|"
+        r"anonymous\.4open\.science|codeocean\.com/|"
+        r"\bcode (?:is|was|has been)\s*(?:available|released|shared|provided)\b|"
+        r"\bsource code (?:is|was|has been)\s*(?:available|released|shared|provided)\b|"
+        r"\bwe release (?:the )?code\b|\bopen[- ]?source\b",
+        model_text, re.I,
+    ))
+    code_future  = bool(re.search(
+        r"\bcode will be available\b|\bcode will be released\b|"
+        r"\bavailable upon acceptance\b",
+        model_text, re.I,
+    ))
+    flags["code_artifact"] = (
+        1.0 if code_url_hit
+        else (0.5 if code_future else 0.0)
+    )
 
+    # data_artifact: confirmed dataset URL or accession number
+    data_url_hit = bool(re.search(
+        r"zenodo\.org/|figshare\.com/|osf\.io/|huggingface\.co/datasets/|"
+        r"kaggle\.com/|dataverse\.|"
+        r"\bGEO accession\b|\bSRA accession\b|\bdbGaP\b|\bPDB ID\b|"
+        r"\bhepdata\.net\b|\bICPSR\b|\bWRDS\b|"
+        r"\bwe release (?:the )?(?:dataset|data)\b|"
+        r"\bdataset (?:is|was|has been)\s*(?:available|released|shared|provided)\b",
+        model_text, re.I,
+    ))
+    data_public  = bool(flags.get("has_data_link", 0.0))
+    data_future  = bool(re.search(
+        r"\bdata will be available\b|\bdataset will be released\b",
+        model_text, re.I,
+    ))
+    flags["data_artifact"] = (
+        1.0 if data_url_hit
+        else (0.5 if (data_public or data_future) else 0.0)
+    )
 
-def get_model_by_id(model_id):
-    for model in list_models():
-        if model.get("id") == model_id:
-            return model
-    return None
+    # availability_statement: any confirmed availability link/statement
+    avail_confirmed = bool(_AVAILABILITY_CONFIRMED_RE.search(model_text))
+    avail_partial   = bool(re.search(
+        r"\bsupplementary material\b|\bartifact(?:s)? will be (?:available|released)\b",
+        model_text, re.I,
+    ))
+    flags["availability_statement"] = (
+        1.0 if avail_confirmed
+        else (0.5 if avail_partial else 0.0)
+    )
 
+    # execution_instructions: pip/conda/docker/README/how-to-run
+    exec_strong = bool(re.search(
+        r"\bpip install\b|\bconda install\b|\brequirements\.txt\b|"
+        r"\bDockerfile\b|\bStep[- ]by[- ]step\b|\bhow to run\b|"
+        r"\bSnakemake\b|\bNextflow\b|\brun\.sh\b",
+        model_text, re.I,
+    ))
+    exec_partial = bool(_EXECUTION_RE.search(model_text))
+    flags["execution_instructions"] = (
+        1.0 if exec_strong
+        else (0.5 if exec_partial else 0.0)
+    )
 
-def get_active_model():
-    models = list_models()
-    for model in models:
-        if model.get("active"):
-            return model
-    return None
-
-
-def set_active_model(model_id: str):
-    models = list_models()
-    found = False
-
-    for model in models:
-        is_active = model["id"] == model_id
-        model["active"] = is_active
-        if is_active:
-            found = True
-            model_dir = MODELS_DIR / model["artifactSubdir"]
-            if not model_dir.exists():
-                raise FileNotFoundError(f"Artifact folder missing for model: {model_id}")
-            if model.get("status") != "ready":
-                raise FileNotFoundError(f"Artifacts are incomplete for model: {model_id}")
-
-    if not found:
-        raise ValueError(f"Model id not found: {model_id}")
-
-    save_registry(model_id, models)
-    clear_model_cache()
-
-
-def _load_model_bundle(model_spec):
-    model_id = model_spec["id"]
-    if model_id in _MODEL_CACHE:
-        return _MODEL_CACHE[model_id]
-
-    model_dir = MODELS_DIR / model_spec["artifactSubdir"]
-    if not model_dir.exists():
-        raise FileNotFoundError(f"Model artifact directory not found: {model_dir}")
-
-    metadata = safe_read_json(model_dir / "metadata.json", {})
-    pipeline_type = model_spec["pipelineType"]
-
-    classifier = joblib.load(model_dir / "classifier.joblib")
-    classifier = _patch_classifier_for_runtime_compatibility(classifier)
-
-    bundle = {
-        "pipelineType": pipeline_type,
-        "classifier": classifier,
-        "label_encoder": joblib.load(model_dir / "label_encoder.joblib"),
-        "metadata": metadata,
-        "score_calibrator": None,
-        "score_feature_columns": DEFAULT_SCORE_FEATURE_COLUMNS,
-    }
-
-    if pipeline_type == "text_input_v1":
-        bundle["vectorizer"] = joblib.load(model_dir / "vectorizer.joblib")
+    # hyperparams_detail: learning rate, batch size, epochs, etc.
+    hyper_hits = sum(
+        1 for p in POSITIVE_PATTERNS["has_hyperparams"]
+        if re.search(p, model_text, re.I)
+    )
+    extra_hyper = bool(re.search(
+        r"\bsample size\b|\bconvergence criterion\b|\btime step\b|"
+        r"\bhyperparameter\b|\bgrid search\b|\brandom search\b",
+        model_text, re.I,
+    ))
+    if hyper_hits >= 3 or (hyper_hits >= 2 and extra_hyper):
+        flags["hyperparams_detail"] = 1.0
+    elif hyper_hits >= 1 or extra_hyper:
+        flags["hyperparams_detail"] = 0.5
     else:
-        feature_columns = safe_read_json(model_dir / "feature_columns.json", [])
-        if not feature_columns and pipeline_type == "feature_base_v1":
-            feature_columns = BASE_FEATURE_COLUMNS
-        bundle["feature_columns"] = feature_columns
+        flags["hyperparams_detail"] = 0.0
 
-    score_calibrator_path = model_dir / "score_calibrator.joblib"
-    if score_calibrator_path.exists():
-        bundle["score_calibrator"] = joblib.load(score_calibrator_path)
-        feature_columns = safe_read_json(model_dir / "score_feature_columns.json", [])
-        if feature_columns:
-            bundle["score_feature_columns"] = feature_columns
+    # seed_disclosed: explicit random seed disclosure
+    seed_strict = bool(re.search(
+        r"\brandom seed\b|\bseed\s*=\s*\d+\b|\bseeded with \d+\b|"
+        r"\brandom_state\s*=\s*\d+\b|\bwe set (?:the )?seed\b",
+        model_text, re.I,
+    ))
+    seed_partial = bool(re.search(r"\bseed\b|\bseeded\b|\brng\b", model_text, re.I))
+    flags["seed_disclosed"] = (
+        1.0 if seed_strict
+        else (0.5 if seed_partial else 0.0)
+    )
 
-    _MODEL_CACHE[model_id] = bundle
-    return bundle
+    # compute_detail: GPU/hardware/training time
+    compute_strong = bool(re.search(
+        r"\bNVIDIA\b|\bH100\b|\bA100\b|\bV100\b|\bRTX\b|\bTPU\b|"
+        r"\bGPU(?:s)?\b|\btraining time\b|\bwall[- ]clock\b|"
+        r"\bCERN\b|\bLHC\b|\bGeant4\b|\bcomputing cluster\b",
+        model_text, re.I,
+    ))
+    compute_partial = bool(re.search(
+        r"\bCUDA\b|\bcompute\b|\bhardware\b|\bCPU\b",
+        model_text, re.I,
+    ))
+    flags["compute_detail"] = (
+        1.0 if compute_strong
+        else (0.5 if compute_partial else 0.0)
+    )
+
+    # software_versions: versioned software names or tool configs
+    sw_strong = bool(_SOFTWARE_VERSIONS_RE.search(model_text))
+    sw_partial = bool(re.search(
+        r"\bPyTorch\b|\bTensorFlow\b|\bscikit[- ]learn\b|\bR package\b|"
+        r"\bMATLAB\b|\bStata\b|\bGeant\b|\bROOT\b",
+        model_text, re.I,
+    ))
+    flags["software_versions"] = (
+        1.0 if sw_strong
+        else (0.5 if sw_partial else 0.0)
+    )
+
+    # evaluation_protocol: benchmarks + metrics present
+    bench_hits  = sum(1 for p in POSITIVE_PATTERNS["has_metrics"] if re.search(p, model_text, re.I))
+    metric_extra = bool(re.search(
+        r"\bROC curve\b|\bAUROC\b|\bhazard ratio\b|\bSharpe ratio\b|"
+        r"\bCONSORT\b|\bSPEC\b|\bMLPerf\b|\bcross[- ]validation\b|"
+        r"\btest set\b|\bevaluation protocol\b|\bvalidation set\b|\bbenchmark\b",
+        model_text, re.I,
+    ))
+    flags["evaluation_protocol"] = (
+        1.0 if (bench_hits >= 2 and metric_extra)
+        else (0.5 if (bench_hits >= 1 or metric_extra) else 0.0)
+    )
+
+    # ablation: ablation study detected
+    ablation_hit = any(
+        re.search(p, model_text, re.I) for p in POSITIVE_PATTERNS["has_ablation"]
+    )
+    flags["ablation"] = 1.0 if ablation_hit else 0.0
+
+    # baseline_comparison: explicit comparison to baselines / SOTA
+    baseline_hit = any(
+        re.search(p, model_text, re.I) for p in POSITIVE_PATTERNS["has_baselines"]
+    )
+    flags["baseline_comparison"] = 1.0 if baseline_hit else 0.0
+
+    # statistical_rigor: confidence intervals, p-values, multiple runs, etc.
+    stat_hits = sum(
+        1 for p in POSITIVE_PATTERNS["has_statistical_tests"]
+        if re.search(p, model_text, re.I)
+    )
+    stat_extra = bool(re.search(
+        r"\bmultiple runs?\b|\bstd(?:ev)?\b|\bbootstrap\b|"
+        r"\bWilcoxon\b|\bt[- ]test\b|\bANOVA\b|\bFDR\b|"
+        r"\bsystematic uncertainty\b|\bluminosity\b",
+        model_text, re.I,
+    ))
+    flags["statistical_rigor"] = (
+        1.0 if (stat_hits >= 2 or (stat_hits >= 1 and stat_extra))
+        else (0.5 if (stat_hits == 1 or stat_extra) else 0.0)
+    )
+
+    # limitations: limitations section or threats-to-validity
+    limitations_hit = any(
+        re.search(p, model_text, re.I) for p in POSITIVE_PATTERNS["has_limitations"]
+    )
+    flags["limitations"] = 1.0 if limitations_hit else 0.0
+
+    return flags
 
 
-def _sigmoid(x):
-    return 1.0 / (1.0 + np.exp(-x))
+# ---------------------------------------------------------------------------
+# Text composition
+# ---------------------------------------------------------------------------
+def _compose_model_text(payload: dict) -> str:
+    title      = _coerce_text(payload.get("title"))
+    abstract   = _coerce_text(payload.get("abstract"))
+    model_text = _coerce_text(payload.get("model_text"))
+    raw_text   = _coerce_text(payload.get("raw_text"))
+    keywords   = payload.get("keywords") or []
+
+    keyword_text = ""
+    if isinstance(keywords, (list, tuple)):
+        keyword_text = " ".join(_coerce_text(item) for item in keywords if _coerce_text(item))
+
+    pieces = [title, abstract, keyword_text, model_text, raw_text]
+    return "\n\n".join(piece for piece in pieces if piece).strip()
 
 
-def _softmax(arr):
-    arr = np.asarray(arr, dtype=float)
-    arr = arr - np.max(arr)
-    exp = np.exp(arr)
-    denom = np.sum(exp)
-    if denom == 0:
-        return np.ones_like(arr) / len(arr)
-    return exp / denom
+# ---------------------------------------------------------------------------
+# Feature row builders (used for classifier and calibrator matrices)
+# ---------------------------------------------------------------------------
+def _merge_payload_with_auto_flags(payload: dict) -> dict:
+    """Auto-compute feature flags and merge into payload (only fills missing keys)."""
+    merged     = dict(payload or {})
+    auto_flags = compute_base_feature_flags(merged)
+    for key, value in auto_flags.items():
+        if key not in merged or merged.get(key) in (None, "", []):
+            merged[key] = value
+    return merged
 
 
-def _safe_predict_proba(classifier, X, label_encoder):
-    try:
-        if hasattr(classifier, "predict_proba"):
-            proba = classifier.predict_proba(X)[0]
-            class_names = label_encoder.classes_.tolist()
-            return {class_names[i]: float(proba[i]) for i in range(len(class_names))}
-    except Exception:
-        pass
-
-    try:
-        if hasattr(classifier, "decision_function"):
-            scores = classifier.decision_function(X)
-            class_names = label_encoder.classes_.tolist()
-
-            if np.ndim(scores) == 1:
-                pos = float(_sigmoid(scores[0]))
-                neg = 1.0 - pos
-                if len(class_names) == 2:
-                    return {
-                        class_names[0]: neg,
-                        class_names[1]: pos,
-                    }
-
-            scores = np.asarray(scores[0], dtype=float)
-            probs = _softmax(scores)
-            return {class_names[i]: float(probs[i]) for i in range(len(class_names))}
-    except Exception:
-        pass
-
-    return {}
+def _build_explicit_feature_row(payload: dict, feature_columns: list[str]) -> pd.DataFrame:
+    """Build the explicit feature row for the given column list."""
+    row = {col: _safe_float(payload.get(col), 0.0) for col in feature_columns}
+    return pd.DataFrame([row])
 
 
-def _predict_score_from_bundle(bundle, payload, prediction):
-    calibrator = bundle.get("score_calibrator")
-    if calibrator is None:
-        return {
-            "used_trained_calibrator": False,
-            "score": None,
-            "label": None,
-        }
+# ---------------------------------------------------------------------------
+# Classifier matrix builder (TF-IDF + explicit features + domain one-hot)
+# ---------------------------------------------------------------------------
+def _align_text_matrix_to_classifier(
+    classifier,
+    text_matrix: sp.csr_matrix,
+    explicit_count: int,
+    domain_count: int,
+) -> sp.csr_matrix:
+    expected_total = getattr(classifier, "n_features_in_", None)
+    if expected_total is None:
+        return text_matrix
 
-    feature_columns = bundle.get("score_feature_columns") or DEFAULT_SCORE_FEATURE_COLUMNS
-    X_score = build_score_feature_frame(payload, prediction, feature_columns)
+    expected_text = int(expected_total) - int(explicit_count) - int(domain_count)
+    if expected_text < 0:
+        raise ValueError(
+            f"Classifier expects {expected_total} total features, which is smaller than "
+            f"the non-text feature count {explicit_count + domain_count}."
+        )
 
-    raw_score = calibrator.predict(X_score)[0]
-    score = float(np.clip(raw_score, 0.0, 100.0))
+    actual_text = int(text_matrix.shape[1])
+    if actual_text == expected_text:
+        return text_matrix
+    if actual_text > expected_text:
+        return text_matrix[:, :expected_text]
 
-    if score < 35.0:
-        label = "Low"
-    elif score < 65.0:
-        label = "Med"
-    else:
-        label = "High"
+    pad = sp.csr_matrix((text_matrix.shape[0], expected_text - actual_text), dtype=text_matrix.dtype)
+    return sp.hstack([text_matrix, pad], format="csr")
+
+
+def _build_classifier_matrix(active_model: dict, payload: dict):
+    """
+    Build the sparse feature matrix for the active model.
+
+    Matrix = [TF-IDF | explicit features | domain one-hot]
+
+    The column dimensions of explicit features and domain one-hot are read
+    from the model's metadata.json so old and new models both work.
+    """
+    model_key   = active_model["model_key"]
+    vectorizer  = _load_joblib_cached(
+        active_model["vectorizer_path"],
+        _cache_key(model_key, "vectorizer"),
+    )
+    classifier  = _load_joblib_cached(
+        active_model["classifier_path"],
+        _cache_key(model_key, "classifier"),
+    )
+
+    model_text = _compose_model_text(payload)
+    if not model_text:
+        raise ValueError("No input text was provided for prediction.")
+
+    explicit_cols   = _get_explicit_feature_columns(active_model)
+    domain_cols     = _get_domain_onehot_cols(active_model)
+    domain          = _extract_domain(payload.get("domain"))
+
+    text_matrix     = vectorizer.transform([model_text])
+    text_matrix     = _align_text_matrix_to_classifier(
+        classifier,
+        text_matrix,
+        explicit_count=len(explicit_cols),
+        domain_count=len(domain_cols),
+    )
+    explicit_df     = _build_explicit_feature_row(payload, explicit_cols)
+    explicit_matrix = sp.csr_matrix(explicit_df.to_numpy(dtype=float))
+    domain_matrix   = _domain_onehot_matrix(domain, domain_cols)
+
+    parts = [text_matrix, explicit_matrix]
+    if domain_matrix.shape[1] > 0:
+        parts.append(domain_matrix)
+
+    matrix = sp.hstack(parts, format="csr")
+
+    expected_total = getattr(classifier, "n_features_in_", None)
+    if expected_total is not None and int(matrix.shape[1]) != int(expected_total):
+        raise ValueError(
+            f"Feature width mismatch after alignment: built {matrix.shape[1]} features, "
+            f"but classifier expects {expected_total}. "
+            f"Check exported metadata.json / vectorizer.joblib / classifier.joblib for model '{model_key}'."
+        )
+
+    return classifier, matrix, model_text
+
+
+# ---------------------------------------------------------------------------
+# Main prediction entry points
+# ---------------------------------------------------------------------------
+def predict_with_active_model(payload: dict) -> dict:
+    active_model = get_active_model()
+    if active_model is None:
+        raise FileNotFoundError("No active model is available in backend/ml_assets/models.")
+
+    payload = _merge_payload_with_auto_flags(payload)
+
+    classifier, matrix, model_text = _build_classifier_matrix(active_model, payload)
+    class_labels  = _load_label_encoder_classes(active_model)
+
+    predicted_raw   = classifier.predict(matrix)[0]
+    predicted_label = _normalize_label(predicted_raw)
+    probabilities   = _extract_probability_map(classifier, matrix, class_labels)
+
+    # Normalize probabilities to LABEL_ORDER keys
+    normalized_probabilities: dict[str, float] = {}
+    for label in LABEL_ORDER:
+        normalized_probabilities[label] = float(probabilities.get(label, 0.0))
+
+    if sum(normalized_probabilities.values()) <= 0:
+        normalized_probabilities[predicted_label] = 1.0
+
+    total = sum(normalized_probabilities.values()) or 1.0
+    normalized_probabilities = {
+        label: float(value / total)
+        for label, value in normalized_probabilities.items()
+    }
+
+    confidence = float(max(normalized_probabilities.values())) if normalized_probabilities else 0.0
 
     return {
-        "used_trained_calibrator": True,
-        "score": round(score, 2),
-        "label": label,
+        "model_key":              active_model["model_key"],
+        "model_dir":              active_model["model_dir"],
+        "predicted_label":        predicted_label,
+        "class_probabilities":    normalized_probabilities,
+        "confidence":             confidence,
+        "model_text_chars":       len(model_text),
+        "domain":                 _extract_domain(payload.get("domain")),
+        "used_score_calibrator":  bool(active_model.get("score_calibrator_path")),
     }
 
 
-def predict_score_with_active_model(payload, prediction=None):
-    model_spec = get_active_model()
-    if not model_spec:
-        raise RuntimeError("No active model is configured.")
+def _safe_probability(probabilities: dict, key: str) -> float:
+    return _safe_float(probabilities.get(key), 0.0)
 
-    bundle = _load_model_bundle(model_spec)
 
-    if prediction is None:
-        prediction = predict_with_active_model(payload)
+def _build_score_feature_frame(active_model: dict, payload: dict, classification_result: dict) -> pd.DataFrame:
+    """
+    Build the feature frame for the score calibrator.
 
-    score_result = _predict_score_from_bundle(bundle, payload, prediction)
-    score_result["model"] = {
-        "id": model_spec["id"],
-        "name": model_spec["name"],
-        "modelType": model_spec["modelType"],
-        "pipelineType": model_spec["pipelineType"],
-        "active": True,
+    Produces ALL possible feature columns (legacy + new) so that
+    score_feature_columns.json can select exactly what the model needs.
+    """
+    model_key       = active_model["model_key"]
+    feature_columns = _load_json_cached(
+        active_model.get("score_feature_columns_path"),
+        _cache_key(model_key, "score_feature_columns"),
+        [],
+    )
+    if not feature_columns:
+        raise FileNotFoundError("score_feature_columns.json is missing for the active model.")
+
+    flags = compute_base_feature_flags(payload)
+
+    # ── Count states ─────────────────────────────────────────────────────────
+    # Using new 13 attributes if available; fallback to legacy positives
+    explicit_cols = _get_explicit_feature_columns(active_model)
+    attr_vals     = [_safe_float(flags.get(col), 0.0) for col in explicit_cols]
+    supported_count = float(sum(1 for v in attr_vals if v >= 0.99))
+    partial_count   = float(sum(1 for v in attr_vals if 0.49 <= v < 0.99))
+    missing_count   = float(sum(1 for v in attr_vals if v < 0.49))
+
+    # ── Probabilities ─────────────────────────────────────────────────────────
+    probabilities = classification_result.get("class_probabilities", {})
+
+    # New binary models: YES→LOW, NO→HIGH after _normalize_label
+    # So P(YES reproducible) is stored as probabilities["LOW"]
+    classifier_prob_yes = _safe_probability(probabilities, "LOW")
+    classifier_prob_no  = _safe_probability(probabilities, "HIGH")
+
+    # Also keep legacy yes_proxy / no_proxy for old calibrators
+    yes_proxy = _safe_probability(probabilities, "LOW")  + 0.5 * _safe_probability(probabilities, "MEDIUM")
+    no_proxy  = _safe_probability(probabilities, "HIGH") + 0.5 * _safe_probability(probabilities, "MEDIUM")
+
+    # ── Other scalar features ─────────────────────────────────────────────────
+    page_count    = _safe_float(payload.get("page_count"), 0.0)
+    rubric_score  = _safe_float(payload.get("rubric_score"), 0.0)
+    llm_label     = _normalize_label(payload.get("llm_label", ""))
+    llm_label_bin = 1.0 if llm_label == "LOW" else 0.0
+
+    # ── Domain one-hot for new 7-domain structure ────────────────────────────
+    domain      = _extract_domain(payload.get("domain"))
+    domain_row  = {col: (1.0 if col == f"dom_{domain}" else 0.0) for col in _NEW_DOMAIN_ONEHOT_COLS}
+
+    # ── Also produce legacy 5-domain one-hot for old calibrators ─────────────
+    for col in _LEGACY_DOMAIN_ONEHOT_COLS:
+        domain_row[col] = 1.0 if col == f"dom_{domain}" else 0.0
+
+    # ── Build comprehensive row ───────────────────────────────────────────────
+    row: dict = {
+        # New 13 attribute flags
+        **{attr: _safe_float(flags.get(attr), 0.0) for attr in NEW_ATTRIBUTE_ORDER},
+        # Legacy 18 feature flags
+        **{col: _safe_float(flags.get(col), 0.0) for col in _LEGACY_BASE_FEATURE_COLUMNS},
+        # Count-based features
+        "supported_count":        supported_count,
+        "partial_count":          partial_count,
+        "missing_count":          missing_count,
+        # Probability features (new names)
+        "classifier_prob_yes":    classifier_prob_yes,
+        "classifier_prob_no":     classifier_prob_no,
+        # Probability features (legacy names)
+        "yes_proxy":              yes_proxy,
+        "no_proxy":               no_proxy,
+        # Scalar features
+        "model_text_chars":       float(classification_result.get("model_text_chars", 0.0)),
+        "page_count":             page_count,
+        "rubric_score":           rubric_score,          # legacy
+        "llm_label_binary":       llm_label_bin,         # legacy
+        # Domain one-hot (both new 7-domain and legacy 5-domain)
+        **domain_row,
     }
-    return score_result
+
+    # ── Build frame and reindex to exactly what the calibrator expects ────────
+    frame = pd.DataFrame([row])
+    for column in feature_columns:
+        if column not in frame.columns:
+            frame[column] = 0.0
+        frame[column] = pd.to_numeric(frame[column], errors="coerce").fillna(0.0).astype(float)
+
+    frame = frame[feature_columns]
+    return frame
 
 
-def predict_with_active_model(payload):
-    model_spec = get_active_model()
-    if not model_spec:
-        raise RuntimeError("No active model is configured.")
+def predict_score_with_active_model(payload: dict) -> dict:
+    active_model = get_active_model()
+    if active_model is None:
+        raise FileNotFoundError("No active model is available in backend/ml_assets/models.")
 
-    bundle = _load_model_bundle(model_spec)
-    classifier = bundle["classifier"]
-    label_encoder = bundle["label_encoder"]
+    score_calibrator_path = active_model.get("score_calibrator_path")
+    if not score_calibrator_path:
+        raise FileNotFoundError("score_calibrator.joblib is missing for the active model.")
 
-    if bundle["pipelineType"] == "text_input_v1":
-        text_input = build_text_input(payload, bundle["metadata"])
-        X = build_text_model_matrix([text_input], bundle["vectorizer"], bundle["metadata"])
-    elif bundle["pipelineType"] == "feature_base_v1":
-        X = build_base_feature_frame(payload, bundle["feature_columns"])
-    elif bundle["pipelineType"] == "feature_rich_v1":
-        X = build_rich_feature_frame(payload, bundle["feature_columns"])
-    else:
-        raise ValueError(f"Unsupported pipelineType: {bundle['pipelineType']}")
+    payload = _merge_payload_with_auto_flags(payload)
+    classification_result = predict_with_active_model(payload)
 
-    try:
-        pred_numeric = classifier.predict(X)[0]
-    except AttributeError as exc:
-        raise RuntimeError(
-            f"Active model '{model_spec['name']}' could not run prediction because its "
-            f"saved sklearn artifact is incompatible with the current runtime: {exc}"
-        ) from exc
+    model_key  = active_model["model_key"]
+    calibrator = _load_joblib_cached(
+        score_calibrator_path,
+        _cache_key(model_key, "score_calibrator"),
+    )
 
-    pred_label = label_encoder.inverse_transform([pred_numeric])[0]
-    probabilities = _safe_predict_proba(classifier, X, label_encoder)
+    feature_frame    = _build_score_feature_frame(active_model, payload, classification_result)
+    predicted_score  = float(calibrator.predict(feature_frame)[0])
+    predicted_score  = _clip_score(predicted_score)
+    predicted_label  = label_from_score(predicted_score)
 
     return {
-        "model": {
-            "id": model_spec["id"],
-            "name": model_spec["name"],
-            "modelType": model_spec["modelType"],
-            "pipelineType": model_spec["pipelineType"],
-            "active": True,
-        },
-        "prediction": pred_label,
-        "probabilities": probabilities,
+        "model_key":       active_model["model_key"],
+        "predicted_score": round(predicted_score, 2),
+        "score":           round(predicted_score, 2),  # legacy alias so old callers still work
+        "predicted_label": predicted_label,
+        "band":            predicted_label,
+        "features_used":   list(feature_frame.columns),
+        "classification":  classification_result,
     }

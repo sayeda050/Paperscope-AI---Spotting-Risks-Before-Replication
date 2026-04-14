@@ -342,7 +342,7 @@ def main() -> None:
     parser.add_argument("--min-rows", type=int, default=MIN_ROWS_PER_DOMAIN)
     args = parser.parse_args()
 
-    domain_filter = validate_domain(args.domain) if args.domain else ""
+    domain_filter = validate_domain(args.domain) if (args.domain and args.domain.lower() != "all") else ""
     domain_tag    = domain_filter or "all"
     run_id        = get_run_id()
 

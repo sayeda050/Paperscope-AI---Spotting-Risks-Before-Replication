@@ -299,101 +299,68 @@ def parse_single_result(raw: dict) -> tuple[int | None, str | None, str]:
         return None, None, f"parse_error: {exc}"
 
 
-# ── Main ───────────────────────────────────────────────────────────────────────
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Auto-label gold score dataset using LLM with batch processing."
-    )
-    parser.add_argument("--domain",          required=True, choices=SUPPORTED_DOMAINS)
-    parser.add_argument("--provider",        choices=["groq", "gemini", "openai"], default="groq")
-    parser.add_argument("--model",           default="")
-    parser.add_argument("--sample-size",     type=int, default=250)
-    parser.add_argument("--min-model-chars", type=int, default=500)
-    parser.add_argument("--random-state",    type=int, default=42)
-    parser.add_argument("--batch-size",      type=int, default=BATCH_SIZE)
-    parser.add_argument("--sleep",           type=float, default=-1,
-                        help="Seconds between batches (-1 = auto)")
-    parser.add_argument("--dry-run",         action="store_true")
-    parser.add_argument("--output-file",     default="")
-    args = parser.parse_args()
-
-    domain        = validate_domain(args.domain)
+# ── Per-domain processing ──────────────────────────────────────────────────────
+def run_for_domain(
+    domain: str,
+    args,
+    model_name: str,
+    sleep_secs: float,
+    out_file: Path,
+    full_df: pd.DataFrame,
+    text_col: str,
+) -> dict:
+    """Label papers for a single domain. Returns a stats dict."""
     system_prompt = get_domain_llm_prompt(domain)
 
-    if not args.model:
-        model_name = {
-            "groq":   "llama-3.3-70b-versatile",
-            "gemini": "gemini-2.0-flash-lite",
-            "openai": "gpt-4o-mini",
-        }.get(args.provider, "llama-3.3-70b-versatile")
-    else:
-        model_name = args.model
-
-    sleep_secs = (GEMINI_SLEEP if args.provider == "gemini" else GROQ_SLEEP) \
-                 if args.sleep < 0 else args.sleep
-
-    out_file = Path(args.output_file) if args.output_file else GOLD_DIR / "gold_score_dataset.csv"
-    ensure_dir(out_file.parent)
-    ensure_dir(REPORT_DIR)
-
-    rows = read_jsonl(IN_FILE)
-    if not rows:
-        raise FileNotFoundError(f"Missing: {IN_FILE}\nRun extract_text.py first.")
-
-    df = pd.DataFrame(rows)
-    text_col = "model_text" if "model_text" in df.columns else "raw_text"
-    df[text_col]   = df[text_col].fillna("").astype(str)
-    df["title"]    = df.get("title",    pd.Series([""] * len(df))).fillna("").astype(str).map(clean_text)
-    df["abstract"] = df.get("abstract", pd.Series([""] * len(df))).fillna("").astype(str).map(clean_text)
-    df["domain"]   = df.get("domain",   pd.Series([domain] * len(df))).fillna(domain).astype(str)
-    if "reproducibility_score" not in df.columns:
-        df["reproducibility_score"] = 50.0
-
-    domain_df = df[df["domain"] == domain].copy()
+    domain_df = full_df[full_df["domain"] == domain].copy()
     if domain_df.empty:
-        domain_df = df.copy()
+        print(f"⚠  No rows found for domain {domain!r} — skipping.")
+        return {"domain": domain, "skipped": True}
+
     domain_df = domain_df[domain_df[text_col].str.len() >= args.min_model_chars]
     domain_df = domain_df.drop_duplicates(subset=["paper_uid"]).reset_index(drop=True)
     if domain_df.empty:
-        raise RuntimeError(f"No usable rows for domain {domain!r}.")
+        print(f"⚠  No usable rows for domain {domain!r} after filtering — skipping.")
+        return {"domain": domain, "skipped": True}
 
-    # Auto-resume
+    # Auto-resume: load already-labeled rows for this domain from the shared out_file
     already_labeled: dict[str, dict] = {}
     if out_file.exists():
         existing_df = pd.read_csv(out_file)
         existing_df["target_score"] = pd.to_numeric(
             existing_df.get("target_score", pd.Series([])), errors="coerce"
         )
-        done_rows = existing_df[existing_df["target_score"].notna()]
+        done_rows = existing_df[
+            existing_df["target_score"].notna() &
+            (existing_df.get("domain", pd.Series([])).astype(str) == domain)
+        ]
         for _, row in done_rows.iterrows():
             already_labeled[str(row["paper_uid"])] = row.to_dict()
         if already_labeled:
-            print(f"📂 Auto-resume: {len(already_labeled)} already done — skipping.")
+            print(f"  📂 Auto-resume ({domain}): {len(already_labeled)} already done — skipping.")
 
     sample_size = min(args.sample_size, len(domain_df))
     sample_df   = domain_df.sample(n=sample_size, random_state=args.random_state).reset_index(drop=True)
     pending_df  = sample_df[~sample_df["paper_uid"].isin(already_labeled.keys())].reset_index(drop=True)
     n_pending   = len(pending_df)
-    n_already   = len(already_labeled)
 
     mode_str = "🔍 DRY RUN" if args.dry_run else f"🤖 {args.provider.upper()} ({model_name})"
-    print(f"{mode_str} labeling {sample_size} {domain} papers "
-          f"({n_already} already done, {n_pending} to process now)...")
+    print(f"\n{mode_str} — domain={domain!r} | {sample_size} papers "
+          f"({len(already_labeled)} done, {n_pending} to process now)")
 
     if n_pending == 0:
-        print("✅ All papers already labeled. Nothing to do.")
-        return
+        print(f"  ✅ All {domain} papers already labeled.")
+        return {"domain": domain, "labeled": 0, "failed": 0, "skipped": False}
 
     batch_size  = args.batch_size
     n_batches   = (n_pending + batch_size - 1) // batch_size
     est_minutes = (n_batches * sleep_secs) / 60
-    print(f"📊 {n_pending} papers → {n_batches} batches of {batch_size} → "
-          f"~{est_minutes:.1f} min at {sleep_secs}s/batch")
+    print(f"  📊 {n_pending} papers → {n_batches} batches → ~{est_minutes:.1f} min")
 
     new_results:  list[dict] = []
     failed_uids:  list[str]  = []
     labeled_count = 0
-    pbar = tqdm(total=n_pending, desc="Labeling", unit="paper")
+    pbar = tqdm(total=n_pending, desc=f"  Labeling {domain}", unit="paper")
 
     for batch_idx in range(n_batches):
         start      = batch_idx * batch_size
@@ -467,44 +434,152 @@ def main() -> None:
 
                 pbar.update(1)
 
-        pd.DataFrame(list(already_labeled.values()) + new_results).to_csv(out_file, index=False)
+        # Incremental save after every batch (appends to shared file safely)
+        combined_rows = list(already_labeled.values()) + new_results
+        if out_file.exists():
+            existing_df = pd.read_csv(out_file)
+            # Drop rows for this domain that we are actively rewriting
+            other_domains_df = existing_df[
+                existing_df.get("domain", pd.Series([])).astype(str) != domain
+            ]
+            pd.concat(
+                [other_domains_df, pd.DataFrame(combined_rows)], ignore_index=True
+            ).to_csv(out_file, index=False)
+        else:
+            pd.DataFrame(combined_rows).to_csv(out_file, index=False)
 
         if batch_idx < n_batches - 1 and not args.dry_run:
             time.sleep(sleep_secs)
 
     pbar.close()
+    print(f"  ✅ {domain}: labeled {labeled_count}, failed {len(failed_uids)}")
+    return {
+        "domain":   domain,
+        "labeled":  labeled_count,
+        "failed":   len(failed_uids),
+        "skipped":  False,
+        "sample_size": sample_size,
+        "failed_uids": failed_uids[:20],
+    }
 
-    final_df      = pd.DataFrame(list(already_labeled.values()) + new_results)
-    final_df.to_csv(out_file, index=False)
-    total_labeled = int(final_df["target_score"].notna().sum())
-    total_pending = int(final_df["target_score"].isna().sum())
+
+# ── Main ───────────────────────────────────────────────────────────────────────
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Auto-label gold score dataset using LLM with batch processing."
+    )
+    parser.add_argument(
+        "--domain",
+        default="all",
+        choices=SUPPORTED_DOMAINS + ["all"],
+        help="Domain to label, or 'all' to label every domain present in the data (default: all).",
+    )
+    parser.add_argument("--provider",        choices=["groq", "gemini", "openai"], default="groq")
+    parser.add_argument("--model",           default="")
+    parser.add_argument("--sample-size",     type=int, default=250)
+    parser.add_argument("--min-model-chars", type=int, default=500)
+    parser.add_argument("--random-state",    type=int, default=42)
+    parser.add_argument("--batch-size",      type=int, default=BATCH_SIZE)
+    parser.add_argument("--sleep",           type=float, default=-1,
+                        help="Seconds between batches (-1 = auto)")
+    parser.add_argument("--dry-run",         action="store_true")
+    parser.add_argument("--output-file",     default="")
+    args = parser.parse_args()
+
+    if not args.model:
+        model_name = {
+            "groq":   "llama-3.3-70b-versatile",
+            "gemini": "gemini-2.0-flash-lite",
+            "openai": "gpt-4o-mini",
+        }.get(args.provider, "llama-3.3-70b-versatile")
+    else:
+        model_name = args.model
+
+    sleep_secs = (GEMINI_SLEEP if args.provider == "gemini" else GROQ_SLEEP) \
+                 if args.sleep < 0 else args.sleep
+
+    out_file = Path(args.output_file) if args.output_file else GOLD_DIR / "gold_score_dataset.csv"
+    ensure_dir(out_file.parent)
+    ensure_dir(REPORT_DIR)
+
+    # ── Load all extracted text once ──────────────────────────────────────────
+    rows = read_jsonl(IN_FILE)
+    if not rows:
+        raise FileNotFoundError(f"Missing: {IN_FILE}\nRun extract_text.py first.")
+
+    full_df  = pd.DataFrame(rows)
+    text_col = "model_text" if "model_text" in full_df.columns else "raw_text"
+    full_df[text_col]   = full_df[text_col].fillna("").astype(str)
+    full_df["title"]    = full_df.get("title",    pd.Series([""] * len(full_df))).fillna("").astype(str).map(clean_text)
+    full_df["abstract"] = full_df.get("abstract", pd.Series([""] * len(full_df))).fillna("").astype(str).map(clean_text)
+    if "reproducibility_score" not in full_df.columns:
+        full_df["reproducibility_score"] = 50.0
+
+    # ── Determine which domains to run ────────────────────────────────────────
+    if args.domain == "all":
+        # Only process domains actually present in the data
+        domains_in_data = sorted(full_df["domain"].dropna().astype(str).unique().tolist())
+        domains_to_run  = [d for d in domains_in_data if d in SUPPORTED_DOMAINS]
+        if not domains_to_run:
+            raise RuntimeError(
+                "No recognised domains found in extracted_text.jsonl. "
+                "Check that 'domain' field is set correctly."
+            )
+        print(f"🌐 Running ALL domains found in data: {domains_to_run}")
+    else:
+        domains_to_run = [validate_domain(args.domain)]
+
+    # ── Loop over domains ─────────────────────────────────────────────────────
+    all_stats: list[dict] = []
+    for domain in domains_to_run:
+        stats = run_for_domain(
+            domain=domain,
+            args=args,
+            model_name=model_name,
+            sleep_secs=sleep_secs,
+            out_file=out_file,
+            full_df=full_df,
+            text_col=text_col,
+        )
+        all_stats.append(stats)
+
+    # ── Final summary ─────────────────────────────────────────────────────────
+    if out_file.exists():
+        final_df      = pd.read_csv(out_file)
+        total_labeled = int(pd.to_numeric(final_df["target_score"], errors="coerce").notna().sum())
+        total_pending = int(pd.to_numeric(final_df["target_score"], errors="coerce").isna().sum())
+        avg_score     = float(pd.to_numeric(final_df["target_score"], errors="coerce").dropna().mean()) \
+                        if total_labeled else None
+    else:
+        total_labeled = total_pending = 0
+        avg_score = None
 
     write_json(REPORT_DIR / "llm_auto_label_report.json", {
         "schema_version":   PIPELINE_SCHEMA_VERSION,
-        "domain":           domain,
+        "domains_run":      domains_to_run,
         "provider":         "dry_run" if args.dry_run else args.provider,
         "model":            "heuristic" if args.dry_run else model_name,
-        "batch_size":       batch_size,
-        "sample_size":      sample_size,
-        "this_run_labeled": labeled_count,
-        "this_run_failed":  len(failed_uids),
+        "batch_size":       args.batch_size,
+        "sample_size":      args.sample_size,
         "total_labeled":    total_labeled,
         "total_pending":    total_pending,
-        "avg_target_score": float(final_df["target_score"].dropna().mean()) if total_labeled else None,
+        "avg_target_score": avg_score,
         "output_file":      str(out_file),
-        "failed_uids":      failed_uids[:20],
+        "domain_stats":     all_stats,
     })
 
-    print(f"\n✅ This run:  labeled {labeled_count}, failed {len(failed_uids)}")
-    print(f"✅ All-time:  labeled {total_labeled}/{sample_size} papers")
-    print(f"✅ Gold dataset → {out_file}")
+    print(f"\n{'='*60}")
+    print(f"✅ All domains done!")
+    print(f"   Total labeled : {total_labeled}")
+    print(f"   Total pending : {total_pending}")
+    print(f"✅ Gold dataset  → {out_file}")
 
     if total_pending > 0 and not args.dry_run:
-        print(f"\n⏰ {total_pending} papers still pending.")
-        print(f"   Re-run the same command — done papers are skipped automatically.")
-    elif total_labeled >= args.sample_size * 0.8:
-        print(f"\n🎯 Enough papers labeled! Next step:")
-        print(f"   python src\\train_score_calibrator.py --domain {domain}")
+        print(f"\n⏰ {total_pending} papers still pending. Re-run to auto-resume.")
+    elif total_labeled > 0:
+        print(f"\n🎯 Next step:")
+        for d in domains_to_run:
+            print(f"   python src\\train_score_calibrator.py --domain {d}")
 
 
 if __name__ == "__main__":

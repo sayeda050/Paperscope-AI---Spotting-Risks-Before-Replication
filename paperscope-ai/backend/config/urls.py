@@ -1,54 +1,30 @@
-from django.contrib import admin
-from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
 from django.http import JsonResponse
+from django.urls import include, path
 
 
-# --------------------------------------------------
-# Root / Health Check
-# --------------------------------------------------
 def health(request):
     return JsonResponse(
         {
-            "status": "ok",
-            "service": "PaperScope AI Backend",
+            "name": "PaperScope AI Backend",
             "version": "v1",
+            "status": "ok",
         }
     )
 
 
-# --------------------------------------------------
-# URL Configuration
-# --------------------------------------------------
 urlpatterns = [
-    # Root health check
     path("", health, name="health"),
-
-    # Django admin
     path("admin/", admin.site.urls),
-
-    # Allauth routes (needed for Google / social auth flows)
-    path("accounts/", include("allauth.urls")),
-
-    # Authentication (dj-rest-auth)
     path("api/auth/", include("dj_rest_auth.urls")),
     path("api/auth/registration/", include("dj_rest_auth.registration.urls")),
-
-    # Application APIs
     path("api/users/", include("apps.users.urls")),
     path("api/papers/", include("apps.papers.urls")),
-
-    # Existing analysis APIs
     path("api/analysis/", include("apps.analysis.urls")),
-
-    # Model registry / active model APIs
-    path("api/analysis/", include("apps.analysis.model_registry_urls")),
+    path("api/analysis/models/", include("apps.analysis.model_registry_urls")),
 ]
 
-
-# --------------------------------------------------
-# Media files (DEV only)
-# --------------------------------------------------
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

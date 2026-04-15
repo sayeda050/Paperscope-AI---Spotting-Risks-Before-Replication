@@ -7,10 +7,10 @@ from apps.papers.models import Paper
 
 class AnalysisJob(models.Model):
     class Status(models.TextChoices):
-        QUEUED = "QUEUED", "QUEUED"
+        QUEUED     = "QUEUED",     "QUEUED"
         PROCESSING = "PROCESSING", "PROCESSING"
-        DONE = "DONE", "DONE"
-        FAILED = "FAILED", "FAILED"
+        DONE       = "DONE",       "DONE"
+        FAILED     = "FAILED",     "FAILED"
 
     job_id = models.BigAutoField(primary_key=True)
 
@@ -27,16 +27,16 @@ class AnalysisJob(models.Model):
         db_column="user_id",
     )
 
-    status = models.CharField(max_length=20, choices=Status.choices)
-    created_at = models.DateTimeField(auto_now_add=True)
+    status       = models.CharField(max_length=20, choices=Status.choices)
+    created_at   = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(blank=True, null=True)
     error_message = models.TextField(blank=True, null=True)
 
     class Meta:
         db_table = "analysis_job"
         indexes = [
-            models.Index(fields=["paper"], name="idx_analysis_job_paper_id"),
-            models.Index(fields=["user"], name="idx_analysis_job_user_id"),
+            models.Index(fields=["paper"],  name="idx_analysis_job_paper_id"),
+            models.Index(fields=["user"],   name="idx_analysis_job_user_id"),
             models.Index(fields=["status"], name="idx_analysis_job_status"),
         ]
 
@@ -45,19 +45,40 @@ class AnalysisJob(models.Model):
 
 
 class ModelVersion(models.Model):
+    """
+    Tracks each trained model artifact registered in ml_assets/registry.json.
+
+    Fields added in v2 (nullable for backward compatibility with existing rows):
+      - domain  : the training domain tag (e.g. "ml", "all", "physics")
+      - run_id  : the pipeline run timestamp (e.g. "20260414_191800")
+    """
     model_version_id = models.BigAutoField(primary_key=True)
-    model_name = models.CharField(max_length=255)
+    model_name       = models.CharField(max_length=255)
 
     artifact_path_vectorizer = models.CharField(max_length=2048)
     artifact_path_classifier = models.CharField(max_length=2048)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    # v2 fields — nullable so existing DB rows remain valid without migration data
+    domain = models.CharField(
+        max_length=64,
+        blank=True,
+        null=True,
+        help_text="Training domain tag, e.g. 'ml', 'all', 'physics'.",
+    )
+    run_id = models.CharField(
+        max_length=64,
+        blank=True,
+        null=True,
+        help_text="Pipeline run timestamp, e.g. '20260414_191800'.",
+    )
+
+    created_at  = models.DateTimeField(auto_now_add=True)
     active_flag = models.BooleanField(default=True)
 
     class Meta:
         db_table = "model_version"
         constraints = [
-            # only one active model at a time (partial unique index)
+            # Only one active model at a time (partial unique index)
             models.UniqueConstraint(
                 fields=["active_flag"],
                 condition=Q(active_flag=True),
@@ -66,7 +87,7 @@ class ModelVersion(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.model_name} (active={self.active_flag})"
+        return f"{self.model_name} (domain={self.domain or 'unknown'}, active={self.active_flag})"
 
 
 class AnalysisResult(models.Model):
@@ -101,7 +122,7 @@ class AnalysisResult(models.Model):
     )
 
     explanation_json = models.JSONField()
-    completed_at = models.DateTimeField(blank=True, null=True)
+    completed_at     = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         db_table = "analysis_result"

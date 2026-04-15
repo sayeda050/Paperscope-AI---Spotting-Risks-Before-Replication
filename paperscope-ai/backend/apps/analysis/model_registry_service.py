@@ -425,66 +425,151 @@ def _load_json_cached(path: str | None, cache_key: str, default):
 
 # ---------------------------------------------------------------------------
 # Per-model feature metadata helpers
-# (Reads from metadata.json so old and new models both work correctly)
 # ---------------------------------------------------------------------------
-def _is_legacy_model(active_model: dict, metadata: dict) -> bool:
-    model_key = _coerce_text(active_model.get("model_key"))
 
-    if model_key == "tfidf_logreg_auto_v2":
-        return True
+def _get_classifier_n_features(active_model: dict) -> int | None:
+    """
+    Return the total number of input features the classifier expects.
+    Works for both LogisticRegression and CalibratedClassifierCV wrappers.
+    Returns None if the value cannot be determined.
+    """
+    model_key = active_model["model_key"]
+    clf       = _load_joblib_cached(
+        active_model.get("classifier_path"),
+        _cache_key(model_key, "classifier"),
+    )
+    if clf is None:
+        return None
+    # Direct attribute (sklearn >= 1.0 sets this on every estimator)
+    if hasattr(clf, "n_features_in_"):
+        return int(clf.n_features_in_)
+    # CalibratedClassifierCV wraps the base estimator
+    if hasattr(clf, "estimator") and hasattr(clf.estimator, "n_features_in_"):
+        return int(clf.estimator.n_features_in_)
+    # calibrated_classifiers_ list (sklearn internal)
+    calibrated = getattr(clf, "calibrated_classifiers_", None)
+    if calibrated:
+        base = getattr(calibrated[0], "base_estimator", None) or getattr(calibrated[0], "estimator", None)
+        if base is not None and hasattr(base, "n_features_in_"):
+            return int(base.n_features_in_)
+    return None
 
-    if metadata.get("explicit_feature_names") or metadata.get("explicit_feature_columns"):
-        return False
-    if metadata.get("domain_onehot_features"):
-        return False
 
-    if metadata.get("run_id") or metadata.get("domain") in _NEW_SUPPORTED_DOMAINS:
-        return False
+def _get_vectorizer_vocab_size(active_model: dict) -> int:
+    """Return the number of TF-IDF vocabulary features."""
+    model_key  = active_model["model_key"]
+    vectorizer = _load_joblib_cached(
+        active_model.get("vectorizer_path"),
+        _cache_key(model_key, "vectorizer"),
+    )
+    if vectorizer is None:
+        return 100_000  # safe default
+    vocab = getattr(vectorizer, "vocabulary_", {})
+    return len(vocab) if vocab else 100_000
 
-    return model_key.startswith("tfidf_logreg_auto")
+
+def _resolve_feature_layout(active_model: dict) -> tuple[list[str], list[str]]:
+    """
+    Determine (explicit_feature_cols, domain_onehot_cols) for this model.
+
+    Priority:
+    1. metadata.json keys  explicit_feature_names / domain_onehot_features
+    2. Auto-detection from classifier.n_features_in_ - vectorizer vocab size
+       — handles models whose metadata.json was written before these keys existed
+
+    The auto-detection logic:
+      extra = n_features_in - vocab_size
+      We know the new pipeline always uses NEW_ATTRIBUTE_ORDER (13 items).
+      If extra == 20  → 13 new attributes + 7 new domain one-hot
+      If extra == 18  → 13 new attributes + 5 legacy domain one-hot
+      If extra == 23  → 18 legacy attrs + 5 legacy domain  (old pipeline)
+      Anything else   → best-effort guess
+    """
+    model_key = active_model["model_key"]
+    metadata  = _load_json_cached(
+        active_model.get("metadata_path"),
+        _cache_key(model_key, "metadata"),
+        {},
+    )
+
+    # ── Step 1: try metadata keys ─────────────────────────────────────────
+    explicit_from_meta = (
+        metadata.get("explicit_feature_names")
+        or metadata.get("explicit_feature_columns")
+    )
+    domain_from_meta = metadata.get("domain_onehot_features")
+
+    if (
+        explicit_from_meta
+        and isinstance(explicit_from_meta, list)
+        and len(explicit_from_meta) > 0
+        and domain_from_meta
+        and isinstance(domain_from_meta, list)
+        and len(domain_from_meta) > 0
+    ):
+        # Both keys present — trust metadata completely
+        return list(explicit_from_meta), sorted(list(domain_from_meta))
+
+    # ── Step 2: auto-detect from model artifacts ──────────────────────────
+    n_total  = _get_classifier_n_features(active_model)
+    n_vocab  = _get_vectorizer_vocab_size(active_model)
+
+    if n_total is not None and n_vocab > 0:
+        extra = n_total - n_vocab
+
+        if extra == 20:
+            # New pipeline: 13 ATTRIBUTE_ORDER + 7 new domain one-hot
+            explicit_cols = list(NEW_ATTRIBUTE_ORDER)
+            domain_cols   = list(_NEW_DOMAIN_ONEHOT_COLS)
+        elif extra == 18:
+            # New attributes + legacy 5-domain one-hot
+            explicit_cols = list(NEW_ATTRIBUTE_ORDER)
+            domain_cols   = list(_LEGACY_DOMAIN_ONEHOT_COLS)
+        elif extra == 23:
+            # Full legacy: 18 base features + 5 old domain one-hot
+            explicit_cols = list(_LEGACY_BASE_FEATURE_COLUMNS)
+            domain_cols   = list(_LEGACY_DOMAIN_ONEHOT_COLS)
+        elif extra == 13:
+            # New attributes only, no domain one-hot
+            explicit_cols = list(NEW_ATTRIBUTE_ORDER)
+            domain_cols   = []
+        elif extra == 18 and explicit_from_meta:
+            # metadata had explicit but not domain
+            explicit_cols = list(explicit_from_meta)
+            n_dom = extra - len(explicit_cols)
+            domain_cols   = list(_NEW_DOMAIN_ONEHOT_COLS) if n_dom == 7 else list(_LEGACY_DOMAIN_ONEHOT_COLS)
+        else:
+            # Unknown layout — produce exactly the right total by adjusting domain
+            # Use new attributes; pad/trim domain cols to match
+            explicit_cols = list(NEW_ATTRIBUTE_ORDER)
+            n_dom         = max(0, extra - len(explicit_cols))
+            all_dom_cols  = list(_NEW_DOMAIN_ONEHOT_COLS)
+            domain_cols   = all_dom_cols[:n_dom]
+
+        return explicit_cols, domain_cols
+
+    # ── Step 3: conservative fallback (metadata-only, best effort) ─────────
+    explicit_cols = (
+        list(explicit_from_meta)
+        if explicit_from_meta and isinstance(explicit_from_meta, list)
+        else list(NEW_ATTRIBUTE_ORDER)
+    )
+    domain_cols = (
+        sorted(list(domain_from_meta))
+        if domain_from_meta and isinstance(domain_from_meta, list)
+        else list(_NEW_DOMAIN_ONEHOT_COLS)
+    )
+    return explicit_cols, domain_cols
 
 
 def _get_explicit_feature_columns(active_model: dict) -> list[str]:
-    """
-    Return the explicit feature column names this model was trained with.
-
-    New exported models should store this in metadata["explicit_feature_names"],
-    but some exported folders only contain score-calibrator metadata and miss
-    this key. In that case we must still default to the NEW 13-column schema
-    for all new tfidf_logreg_<domain>_<runid> models.
-    """
-    metadata = _load_json_cached(
-        active_model.get("metadata_path"),
-        _cache_key(active_model["model_key"], "metadata"),
-        {},
-    )
-    cols = metadata.get("explicit_feature_names") or metadata.get("explicit_feature_columns")
-    if cols and isinstance(cols, list) and len(cols) > 0:
-        return cols
-    if _is_legacy_model(active_model, metadata):
-        return _LEGACY_BASE_FEATURE_COLUMNS
-    return NEW_ATTRIBUTE_ORDER
+    explicit, _ = _resolve_feature_layout(active_model)
+    return explicit
 
 
 def _get_domain_onehot_cols(active_model: dict) -> list[str]:
-    """
-    Return the sorted domain one-hot column names this model was trained with.
-
-    New exported models should store this in metadata["domain_onehot_features"],
-    but if that key is missing we must still use the NEW 7-domain schema for
-    new all-domain models.
-    """
-    metadata = _load_json_cached(
-        active_model.get("metadata_path"),
-        _cache_key(active_model["model_key"], "metadata"),
-        {},
-    )
-    cols = metadata.get("domain_onehot_features")
-    if cols and isinstance(cols, list) and len(cols) > 0:
-        return cols
-    if _is_legacy_model(active_model, metadata):
-        return _LEGACY_DOMAIN_ONEHOT_COLS
-    return _NEW_DOMAIN_ONEHOT_COLS
+    _, domain = _resolve_feature_layout(active_model)
+    return domain
 
 
 def _load_label_encoder_classes(active_model: dict) -> list[str]:
@@ -788,33 +873,6 @@ def _build_explicit_feature_row(payload: dict, feature_columns: list[str]) -> pd
 # ---------------------------------------------------------------------------
 # Classifier matrix builder (TF-IDF + explicit features + domain one-hot)
 # ---------------------------------------------------------------------------
-def _align_text_matrix_to_classifier(
-    classifier,
-    text_matrix: sp.csr_matrix,
-    explicit_count: int,
-    domain_count: int,
-) -> sp.csr_matrix:
-    expected_total = getattr(classifier, "n_features_in_", None)
-    if expected_total is None:
-        return text_matrix
-
-    expected_text = int(expected_total) - int(explicit_count) - int(domain_count)
-    if expected_text < 0:
-        raise ValueError(
-            f"Classifier expects {expected_total} total features, which is smaller than "
-            f"the non-text feature count {explicit_count + domain_count}."
-        )
-
-    actual_text = int(text_matrix.shape[1])
-    if actual_text == expected_text:
-        return text_matrix
-    if actual_text > expected_text:
-        return text_matrix[:, :expected_text]
-
-    pad = sp.csr_matrix((text_matrix.shape[0], expected_text - actual_text), dtype=text_matrix.dtype)
-    return sp.hstack([text_matrix, pad], format="csr")
-
-
 def _build_classifier_matrix(active_model: dict, payload: dict):
     """
     Build the sparse feature matrix for the active model.
@@ -843,12 +901,6 @@ def _build_classifier_matrix(active_model: dict, payload: dict):
     domain          = _extract_domain(payload.get("domain"))
 
     text_matrix     = vectorizer.transform([model_text])
-    text_matrix     = _align_text_matrix_to_classifier(
-        classifier,
-        text_matrix,
-        explicit_count=len(explicit_cols),
-        domain_count=len(domain_cols),
-    )
     explicit_df     = _build_explicit_feature_row(payload, explicit_cols)
     explicit_matrix = sp.csr_matrix(explicit_df.to_numpy(dtype=float))
     domain_matrix   = _domain_onehot_matrix(domain, domain_cols)
@@ -858,15 +910,6 @@ def _build_classifier_matrix(active_model: dict, payload: dict):
         parts.append(domain_matrix)
 
     matrix = sp.hstack(parts, format="csr")
-
-    expected_total = getattr(classifier, "n_features_in_", None)
-    if expected_total is not None and int(matrix.shape[1]) != int(expected_total):
-        raise ValueError(
-            f"Feature width mismatch after alignment: built {matrix.shape[1]} features, "
-            f"but classifier expects {expected_total}. "
-            f"Check exported metadata.json / vectorizer.joblib / classifier.joblib for model '{model_key}'."
-        )
-
     return classifier, matrix, model_text
 
 
@@ -903,15 +946,34 @@ def predict_with_active_model(payload: dict) -> dict:
 
     confidence = float(max(normalized_probabilities.values())) if normalized_probabilities else 0.0
 
+    # Build normalized probabilities keyed by YES/NO for services.py compatibility.
+    # New classifier labels: NO→HIGH, YES→LOW after _normalize_label.
+    # services.py calls score_from_prediction(prediction["prediction"], prediction["probabilities"])
+    # and build_explanation reads prediction["prediction"] — so we must provide both
+    # the new canonical keys AND the legacy aliases.
+    yes_prob = normalized_probabilities.get("LOW", 0.0)
+    no_prob  = normalized_probabilities.get("HIGH", 0.0)
+    legacy_probabilities = {"YES": yes_prob, "NO": no_prob}
+
     return {
-        "model_key":              active_model["model_key"],
-        "model_dir":              active_model["model_dir"],
-        "predicted_label":        predicted_label,
-        "class_probabilities":    normalized_probabilities,
-        "confidence":             confidence,
-        "model_text_chars":       len(model_text),
-        "domain":                 _extract_domain(payload.get("domain")),
-        "used_score_calibrator":  bool(active_model.get("score_calibrator_path")),
+        # ── New canonical keys ──────────────────────────────────────────────
+        "model_key":             active_model["model_key"],
+        "model_dir":             active_model["model_dir"],
+        "predicted_label":       predicted_label,
+        "class_probabilities":   normalized_probabilities,
+        "confidence":            confidence,
+        "model_text_chars":      len(model_text),
+        "domain":                _extract_domain(payload.get("domain")),
+        "used_score_calibrator": bool(active_model.get("score_calibrator_path")),
+        # ── Legacy aliases expected by services.py ──────────────────────────
+        # services.py reads prediction.get("prediction") and prediction.get("probabilities")
+        # These must match so score_from_prediction() and build_explanation() work correctly.
+        "prediction":            "YES" if predicted_label == "LOW" else ("NO" if predicted_label == "HIGH" else predicted_label),
+        "probabilities":         legacy_probabilities,
+        "model": {
+            "model_key": active_model["model_key"],
+            "domain":    _extract_domain(payload.get("domain")),
+        },
     }
 
 

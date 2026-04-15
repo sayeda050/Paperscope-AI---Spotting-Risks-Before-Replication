@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
 
     # ── UPDATE THIS to your actual last migration name ────────────────────
     dependencies = [
-        ("analysis", "0001_initial"),   # ← replace with your real last migration
+        ("analysis", "0003_initial"),   # ← replace with your real last migration
     ]
 
     operations = [

@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "domain": "all",
-  "model_dir": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\all\\20260414_125455",
+  "model_dir": "C:\\Users\\Admin\\Downloads\\PaperScope AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\all\\20260416_023820",
   "calibration": "isotonic",
   "test_accuracy": 0.9529411764705882,
   "labels": [

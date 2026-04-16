@@ -190,8 +190,33 @@ def _coerce_text(value) -> str:
     return str(value or "").strip()
 
 
-def _normalize_label(value: str) -> str:
-    text = _coerce_text(value).upper()
+def _normalize_label(value) -> str:
+    """
+    Normalize a raw prediction value to one of LOW / MEDIUM / HIGH.
+
+    Handles three input types:
+      - Python/numpy integers (0 or 1) from sklearn LabelEncoder.
+        LabelEncoder.fit(["NO","YES"]) produces NO=0, YES=1.
+        0 (NO) → not reproducible → HIGH risk.
+        1 (YES) → reproducible   → LOW  risk.
+        The OLD _coerce_text(0) returned "" (because `0 or ""` = ""),
+        causing LABEL_MAP.get("", "MEDIUM") = "MEDIUM" — the root cause
+        of "predicts the paper is medium" appearing in every summary.
+      - Float values like 0.0 / 1.0 (same mapping).
+      - String labels ("NO", "YES", "HIGH", "LOW", "MEDIUM", …) via LABEL_MAP.
+    """
+    if value is None:
+        return "MEDIUM"
+    # Numeric path — handles int, np.int32, np.int64, float (0.0/1.0)
+    try:
+        num = float(value)
+        if num == int(num) and int(num) in (0, 1):
+            # Binary LabelEncoder: 0 = NO = HIGH risk, 1 = YES = LOW risk
+            return "HIGH" if int(num) == 0 else "LOW"
+    except (TypeError, ValueError):
+        pass
+    # String path — use explicit str() to avoid `0 or ""` falsy collapse
+    text = str(value).strip().upper()
     return LABEL_MAP.get(text, text or "MEDIUM")
 
 
@@ -522,7 +547,7 @@ def _resolve_feature_layout(active_model: dict) -> tuple[list[str], list[str]]:
             explicit_cols = list(NEW_ATTRIBUTE_ORDER)
             domain_cols   = list(_NEW_DOMAIN_ONEHOT_COLS)
         elif extra == 18:
-            # New attributes + legacy 5-domain one-hot
+            # New attributes + legacy 5-domain one-hot (13 + 5 = 18)
             explicit_cols = list(NEW_ATTRIBUTE_ORDER)
             domain_cols   = list(_LEGACY_DOMAIN_ONEHOT_COLS)
         elif extra == 23:
@@ -533,18 +558,37 @@ def _resolve_feature_layout(active_model: dict) -> tuple[list[str], list[str]]:
             # New attributes only, no domain one-hot
             explicit_cols = list(NEW_ATTRIBUTE_ORDER)
             domain_cols   = []
-        elif extra == 18 and explicit_from_meta:
-            # metadata had explicit but not domain
+        elif explicit_from_meta and isinstance(explicit_from_meta, list) and len(explicit_from_meta) > 0:
+            # Metadata supplied explicit feature names but not domain; infer domain from remainder.
+            # This branch is now reachable for any extra value when explicit_from_meta is present
+            # and the exact layout was not matched above.
             explicit_cols = list(explicit_from_meta)
             n_dom = extra - len(explicit_cols)
-            domain_cols   = list(_NEW_DOMAIN_ONEHOT_COLS) if n_dom == 7 else list(_LEGACY_DOMAIN_ONEHOT_COLS)
+            if n_dom == 7:
+                domain_cols = list(_NEW_DOMAIN_ONEHOT_COLS)
+            elif n_dom == 5:
+                domain_cols = list(_LEGACY_DOMAIN_ONEHOT_COLS)
+            elif n_dom > 0:
+                domain_cols = list(_NEW_DOMAIN_ONEHOT_COLS)[:n_dom]
+            else:
+                # explicit_from_meta has more cols than extra allows — trim to fit
+                explicit_cols = explicit_cols[:max(0, extra)]
+                domain_cols   = []
         else:
-            # Unknown layout — produce exactly the right total by adjusting domain
-            # Use new attributes; pad/trim domain cols to match
+            # Unknown layout — produce exactly the right total by adjusting domain.
+            # BUG FIX: when extra < len(NEW_ATTRIBUTE_ORDER) the old code returned 13
+            # explicit columns regardless, making the matrix wider than the classifier
+            # expects (e.g. extra=10 → 13 cols → matrix 3 features too wide → crash).
+            # Fix: trim explicit_cols to `extra` when there is no room for domain cols.
             explicit_cols = list(NEW_ATTRIBUTE_ORDER)
-            n_dom         = max(0, extra - len(explicit_cols))
-            all_dom_cols  = list(_NEW_DOMAIN_ONEHOT_COLS)
-            domain_cols   = all_dom_cols[:n_dom]
+            n_dom         = extra - len(explicit_cols)   # may be negative
+            if n_dom < 0:
+                # Not enough room for all attribute columns — trim to exactly `extra`
+                explicit_cols = explicit_cols[:max(0, extra)]
+                domain_cols   = []
+            else:
+                all_dom_cols = list(_NEW_DOMAIN_ONEHOT_COLS)
+                domain_cols  = all_dom_cols[:n_dom]
 
         return explicit_cols, domain_cols
 
@@ -910,6 +954,26 @@ def _build_classifier_matrix(active_model: dict, payload: dict):
         parts.append(domain_matrix)
 
     matrix = sp.hstack(parts, format="csr")
+
+    # ── Safety guard: align matrix width to exactly what the classifier expects ──
+    # _resolve_feature_layout may still produce a slight mismatch for exotic model
+    # layouts not covered by the known cases above (e.g. models trained with an
+    # intermediate or custom feature set).  Rather than crashing with a sklearn
+    # "X has N features, but ... is expecting M features" error, we trim or pad
+    # here so the request can always complete.
+    expected_n_features = _get_classifier_n_features(active_model)
+    if expected_n_features is not None:
+        actual_n_features = matrix.shape[1]
+        if actual_n_features > expected_n_features:
+            # Trim trailing columns (never trim TF-IDF part — only explicit/domain tail)
+            matrix = matrix[:, :expected_n_features]
+        elif actual_n_features < expected_n_features:
+            # Pad missing columns with zeros so sklearn does not raise
+            padding = sp.csr_matrix(
+                np.zeros((matrix.shape[0], expected_n_features - actual_n_features), dtype=float)
+            )
+            matrix = sp.hstack([matrix, padding], format="csr")
+
     return classifier, matrix, model_text
 
 

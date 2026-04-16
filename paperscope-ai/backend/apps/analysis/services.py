@@ -5,6 +5,22 @@ from collections import Counter
 from decimal import Decimal
 from typing import Dict, List, Tuple
 
+from sklearn.linear_model import LogisticRegression as _SklearnLogisticRegression
+
+def _paperscope_get_multi_class(self):
+    return self.__dict__.get(
+        "multi_class",
+        "ovr" if getattr(self, "solver", None) == "liblinear" else "auto",
+    )
+
+def _paperscope_set_multi_class(self, value):
+    self.__dict__["multi_class"] = value
+
+_SklearnLogisticRegression.multi_class = property(
+    _paperscope_get_multi_class,
+    _paperscope_set_multi_class,
+)
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -71,7 +87,14 @@ VERSION_RE = re.compile(
     re.I,
 )
 ENV_RE = re.compile(
-    r"\b(gpu|cpu|cuda|ubuntu|linux|hardware|software version|library version|package version|server|cluster)\b",
+    # "server" and "cluster" removed — they appear in every FL paper as
+    # "central server" / "local clients", not as hardware environment details.
+    # Only match environment signals that genuinely indicate the compute setup.
+    r"\b(gpu|cpu|cuda|ubuntu|linux|"
+    r"(?:software|library|package|framework)\s+version|"
+    r"(?:compute|hpc|gpu|cpu)\s+(?:cluster|node|farm)|"
+    r"a100|v100|h100|p100|rtx\s*\d+|geforce|tesla\s+\w+|"
+    r"xeon|threadripper)\b",
     re.I,
 )
 PARAM_DETAIL_RE = re.compile(
@@ -79,7 +102,9 @@ PARAM_DETAIL_RE = re.compile(
     re.I,
 )
 ALGORITHM_RE = re.compile(r"\balgorithm\s+\d+\b", re.I)
-TABLE_RE = re.compile(r"\btable\s+[ivxlcdm]+\b", re.I)
+# Fixed: previously only matched Roman numerals (Table I, II…).
+# Now also matches Arabic numerals (Table 1, 2, 3…) which most ML papers use.
+TABLE_RE = re.compile(r"\btable\s+(?:[ivxlcdm]+|\d+)\b", re.I)
 EQUATION_ID_RE = re.compile(r"\(\d+\)")
 
 # Evaluation rigor
@@ -92,7 +117,17 @@ BASELINE_RE = re.compile(
     re.I,
 )
 ABLATION_RE = re.compile(r"\b(ablation|ablation study|w/o|without)\b", re.I)
-CV_RE = re.compile(r"\b(cross-validation|k-fold|5-fold|10-fold|holdout|held-out|train-test split)\b", re.I)
+# Fixed: original only matched k-fold / holdout. Many papers (especially FL/systems)
+# evaluate on held-out test sets without k-fold; we now capture those too.
+CV_RE = re.compile(
+    r"\b(cross[- ]?validation|k[- ]?fold|\d+[- ]fold|holdout|held[- ]?out|train[- ]test\s+split|"
+    r"test\s+(?:set|accuracy|performance|error|top[- ]\d+)|"
+    r"evaluation\s+(?:set|protocol|procedure|result)|"
+    r"validation\s+(?:set|accuracy|performance)|"
+    r"benchmark\s+(?:result|evaluation|test)|"
+    r"test\s+accuracy|test\s+top[- ]\d+\s+acc)\b",
+    re.I,
+)
 NESTED_CV_RE = re.compile(r"\b(nested validation|nested cross-validation)\b", re.I)
 EXTERNAL_VALIDATION_RE = re.compile(r"\b(external validation|independent cohort|left-out sets|testing performance)\b", re.I)
 STAT_TEST_RE = re.compile(
@@ -1062,12 +1097,43 @@ def _score_with_trained_calibrator(title: str, abstract: str, cleaned_text: str,
 
 
 def _calibrate_score(title: str, abstract: str, cleaned_text: str, prediction: dict) -> dict:
+    # Always compute heuristic — used as baseline and for blending check.
+    heuristic = _heuristic_calibrate_score(title, abstract, cleaned_text, prediction)
+
     try:
-        return _score_with_trained_calibrator(title, abstract, cleaned_text, prediction)
+        trained       = _score_with_trained_calibrator(title, abstract, cleaned_text, prediction)
+        trained_score = trained["calibrated_score"]
+        heuristic_score = heuristic["calibrated_score"]
+        gap = heuristic_score - trained_score  # positive = calibrator is more optimistic
+
+        # If the trained calibrator is significantly more optimistic than the
+        # heuristic (common when calibrator training data was limited or when
+        # the calibrator has not seen enough examples of code-less papers),
+        # blend the two to produce a more reliable, conservative estimate.
+        # Threshold = 15 points: covers the case where a paper with no code/seed
+        # gets a heuristic of ~45-50 but calibrator gives ~25-30.
+        if gap > 15:
+            # Weighted blend: 40 % calibrator (preserves learned signal)
+            #                 60 % heuristic   (provides evidence-based floor)
+            blend_w = min(0.6, gap / 50.0)      # scales up to 60 % as gap grows
+            blended  = clamp_score((1 - blend_w) * trained_score + blend_w * heuristic_score)
+            result   = dict(trained)
+            result["calibrated_score"]    = round(blended, 2)
+            result["db_label"]            = label_from_score(blended)
+            result["negatives"]           = heuristic["negatives"]
+            result["positives"]           = heuristic["positives"]
+            result["signals"]             = heuristic["signals"]
+            result["raw_base_score"]      = heuristic["raw_base_score"]
+            result["tempered_base_score"] = round(blended, 2)
+            result["calibration_source"]  = "blended_calibrator_heuristic"
+            return result
+
+        # Calibrator close to or more pessimistic than heuristic — trust it directly.
+        return trained
+
     except Exception:
-        calibration = _heuristic_calibrate_score(title, abstract, cleaned_text, prediction)
-        calibration["calibration_source"] = "heuristic_fallback"
-        return calibration
+        heuristic["calibration_source"] = "heuristic_fallback"
+        return heuristic
 
 
 def build_explanation(title: str, abstract: str, cleaned_text: str, prediction: dict) -> dict:
@@ -1078,18 +1144,28 @@ def build_explanation(title: str, abstract: str, cleaned_text: str, prediction: 
     calibration = _calibrate_score(title, abstract, cleaned_text, prediction)
     keywords    = [word for word, _ in extract_keywords(cleaned_text)]
 
-    score       = int(round(calibration["calibrated_score"]))
+    # Use normal arithmetic rounding (X.5 → X+1) instead of Python's banker's
+    # rounding, so the integer shown in the summary always matches what the
+    # frontend displays via JavaScript's Math.round().
+    score       = int(calibration["calibrated_score"] + 0.5)
     top_factors = calibration["negatives"] + calibration["positives"]
     if not top_factors:
         top_factors = ["The paper contains a balanced mix of reproducibility indicators."]
 
+    # ── pred_phrase ─────────────────────────────────────────────────────────
+    # prediction["prediction"] is the legacy alias set in model_registry_service.
+    # After the _normalize_label integer fix it will be "YES" or "NO".
+    # We also handle all possible values defensively so the summary text is
+    # always grammatically correct regardless of model version.
     model_pred = str(prediction.get("prediction", "")).strip().upper()
-    if model_pred == "YES":
+    if model_pred in ("YES", "LOW", "1"):
         pred_phrase = "more reproducible"
-    elif model_pred == "NO":
+    elif model_pred in ("NO", "HIGH", "0"):
         pred_phrase = "not clearly reproducible"
+    elif model_pred == "MEDIUM":
+        pred_phrase = "moderately reproducible"
     else:
-        pred_phrase = model_pred.lower() if model_pred else "uncertain"
+        pred_phrase = "uncertain in reproducibility"
 
     if calibration["signals"]["is_theory_heavy"]:
         summary = (
@@ -1171,14 +1247,17 @@ def run_analysis_for_paper(*, paper: Paper, user, title: str, cleaned_text: str,
 
         explanation = build_explanation(title, abstract, cleaned_text, prediction)
         final_score = float(explanation["calibration"]["finalScore"])
-        db_label    = label_from_score(final_score)
+        # Use normal arithmetic rounding (X.5 → X+1) to match JavaScript's
+        # Math.round() in the frontend, preventing the 29 vs 28 card/text mismatch.
+        final_score_int = int(final_score + 0.5)
+        db_label    = label_from_score(float(final_score_int))
         now         = timezone.now()
 
         AnalysisResult.objects.update_or_create(
             job=job,
             defaults={
                 "model_version": active_model_version,
-                "risk_score":    Decimal(str(round(final_score, 2))),
+                "risk_score":    Decimal(str(final_score_int)),
                 "risk_label":    db_label,
                 "explanation_json": explanation,
                 "completed_at":  now,

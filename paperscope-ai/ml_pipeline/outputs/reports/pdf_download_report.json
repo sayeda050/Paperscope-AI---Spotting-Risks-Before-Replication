@@ -1,50 +1,14 @@
 {
-  "mode": "openreview_direct_pdf_download",
-  "input_rows_total": 23312,
-  "processed_rows": 1000,
-  "max_papers_requested": 1000,
-  "downloaded_ok": 976,
-  "already_present": 20,
-  "failed": 4,
+  "schema_version": "2.0",
+  "input_file": "data\\raw\\arxiv_raw_math.jsonl",
+  "input_rows_total": 200,
+  "processed_rows": 200,
+  "max_papers_requested": 200,
+  "downloaded_ok": 200,
+  "already_present": 0,
+  "failed": 0,
   "missing_pdf_url": 0,
-  "output_file": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\processed\\linked_with_pdfs.jsonl",
-  "pdf_dir": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\data\\pdfs\\openreview",
-  "sample_errors": [
-    {
-      "paper_uid": "or_yI60yhMQ7L",
-      "openreview_id": "yI60yhMQ7L",
-      "forum_id": "yI60yhMQ7L",
-      "candidate_urls": [
-        "https://openreview.net/pdf?id=yI60yhMQ7L"
-      ],
-      "error": "http_404"
-    },
-    {
-      "paper_uid": "or_xwcCFxIEEL",
-      "openreview_id": "xwcCFxIEEL",
-      "forum_id": "xwcCFxIEEL",
-      "candidate_urls": [
-        "https://openreview.net/pdf?id=xwcCFxIEEL"
-      ],
-      "error": "http_404"
-    },
-    {
-      "paper_uid": "or_wDao6K52aN",
-      "openreview_id": "wDao6K52aN",
-      "forum_id": "wDao6K52aN",
-      "candidate_urls": [
-        "https://openreview.net/pdf?id=wDao6K52aN"
-      ],
-      "error": "http_404"
-    },
-    {
-      "paper_uid": "or_vlpl0XE8Ll",
-      "openreview_id": "vlpl0XE8Ll",
-      "forum_id": "vlpl0XE8Ll",
-      "candidate_urls": [
-        "https://openreview.net/pdf?id=vlpl0XE8Ll"
-      ],
-      "error": "http_404"
-    }
-  ]
+  "output_file": "D:\\NSU Hridi\\Paperscope-AI---Spotting-Risks-Before-Replication\\paperscope-ai\\ml_pipeline\\data\\processed\\linked_with_pdfs.jsonl",
+  "pdf_base_dir": "D:\\NSU Hridi\\Paperscope-AI---Spotting-Risks-Before-Replication\\paperscope-ai\\ml_pipeline\\data\\pdfs",
+  "sample_errors": []
 }

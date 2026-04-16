@@ -1,0 +1,16 @@
+{
+  "input_rows": 200,
+  "kept_rows": 200,
+  "duplicate_uid_dropped": 0,
+  "missing_pdf_path": 0,
+  "pymupdf_success": 200,
+  "pdfplumber_success": 0,
+  "pdf_extract_failed": 0,
+  "dropped_short_raw_text": 0,
+  "rows_with_review_text": 0,
+  "rows_with_decision_text": 0,
+  "title_filled_from_pdf": 0,
+  "abstract_filled_from_pdf": 0,
+  "keywords_filled_from_pdf": 0,
+  "schema_version": "2.0"
+}

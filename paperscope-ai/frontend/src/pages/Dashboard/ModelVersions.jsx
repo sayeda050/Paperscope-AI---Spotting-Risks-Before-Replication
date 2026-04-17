@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext.jsx";
-import { Plus, Cpu, CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Cpu, Plus } from "lucide-react";
 import "./Dashboard.css";
 import "./AdminDashboard.css";
 import "./ModelVersions.css";
@@ -19,9 +19,31 @@ function getCookie(name) {
   return "";
 }
 
+function getStoredAuthToken() {
+  const possibleKeys = [
+    "token",
+    "accessToken",
+    "access_token",
+    "authToken",
+    "auth_token",
+    "key",
+  ];
+
+  for (const key of possibleKeys) {
+    const localValue = window.localStorage.getItem(key);
+    if (localValue) return localValue;
+
+    const sessionValue = window.sessionStorage.getItem(key);
+    if (sessionValue) return sessionValue;
+  }
+
+  return "";
+}
+
 async function apiRequest(path, options = {}) {
   const method = (options.method || "GET").toUpperCase();
   const csrftoken = getCookie("csrftoken");
+  const token = getStoredAuthToken();
 
   const headers = {
     ...(options.headers || {}),
@@ -29,6 +51,13 @@ async function apiRequest(path, options = {}) {
 
   if (!(options.body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
+  }
+
+  if (token && !headers.Authorization) {
+    headers.Authorization =
+      token.startsWith("Token ") || token.startsWith("Bearer ")
+        ? token
+        : `Token ${token}`;
   }
 
   if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && csrftoken) {
@@ -51,7 +80,8 @@ async function apiRequest(path, options = {}) {
     const message =
       (typeof data === "object" && data?.detail) ||
       (typeof data === "object" && data?.message) ||
-      "Request failed.";
+      (typeof data === "string" && data) ||
+      `Request failed with status ${response.status}.`;
     throw new Error(message);
   }
 
@@ -59,10 +89,89 @@ async function apiRequest(path, options = {}) {
 }
 
 function formatAccuracy(value) {
-  if (value === null || value === undefined) return "";
-  const pct = Number(value) * 100;
-  if (Number.isNaN(pct)) return "";
+  if (value === null || value === undefined || value === "") return "";
+
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) return "";
+
+  const pct = numeric <= 1 ? numeric * 100 : numeric;
   return `${pct.toFixed(2)}%`;
+}
+
+function pickFirst(...values) {
+  for (const value of values) {
+    if (value !== null && value !== undefined && value !== "") {
+      return value;
+    }
+  }
+  return null;
+}
+
+function normalizeModel(model) {
+  const metrics =
+    model?.metrics && typeof model.metrics === "object" ? model.metrics : {};
+  const metadata =
+    model?.metadata && typeof model.metadata === "object" ? model.metadata : {};
+
+  const id = pickFirst(model?.id, model?.model_id, model?.model_key, model?.pk);
+  const name = pickFirst(
+    model?.name,
+    model?.display_name,
+    model?.model_name,
+    metadata?.display_name,
+    metadata?.model_name,
+    id,
+    "Unnamed model"
+  );
+  const active = Boolean(
+    model?.active ?? model?.is_active ?? model?.active_flag ?? false
+  );
+  const createdAt = pickFirst(
+    model?.createdAt,
+    model?.created_at,
+    model?.trained_at,
+    metadata?.created_at,
+    metadata?.trained_at,
+    model?.run_id,
+    metadata?.run_id,
+    "Unknown"
+  );
+  const modelType = pickFirst(
+    model?.modelType,
+    model?.model_type,
+    [metadata?.vectorizer_type, metadata?.classifier_type]
+      .filter(Boolean)
+      .join(" + "),
+    metadata?.model_name,
+    ""
+  );
+  const testAccuracy = pickFirst(
+    metrics?.testAccuracy,
+    metrics?.test_accuracy,
+    model?.test_accuracy,
+    metadata?.test_accuracy,
+    metadata?.accuracy,
+    null
+  );
+  const status = pickFirst(
+    model?.status,
+    model?.score_calibrator_path ? "Calibrated" : "Ready",
+    "Ready"
+  );
+
+  return {
+    ...model,
+    id,
+    name,
+    active,
+    createdAt,
+    modelType,
+    metrics: {
+      ...metrics,
+      testAccuracy,
+    },
+    status,
+  };
 }
 
 export default function ModelVersions() {
@@ -114,8 +223,14 @@ export default function ModelVersions() {
 
     try {
       const data = await apiRequest("/api/analysis/models/");
-      setModels(data.models || []);
+      const rawModels = Array.isArray(data?.models)
+        ? data.models
+        : Array.isArray(data)
+        ? data
+        : [];
+      setModels(rawModels.map(normalizeModel).filter((model) => model.id));
     } catch (err) {
+      setModels([]);
       setPageError(err.message || "Failed to load models.");
     } finally {
       setLoadingModels(false);
@@ -135,7 +250,7 @@ export default function ModelVersions() {
       await loadModels();
 
       setToast("Model activated");
-      setTimeout(() => setToast(""), 2500);
+      window.setTimeout(() => setToast(""), 2500);
     } catch (err) {
       setPageError(err.message || "Failed to activate model.");
     } finally {
@@ -155,7 +270,7 @@ export default function ModelVersions() {
       await loadModels();
 
       setToast("Model registry refreshed");
-      setTimeout(() => setToast(""), 2500);
+      window.setTimeout(() => setToast(""), 2500);
     } catch (err) {
       setPageError(err.message || "Failed to refresh model registry.");
     }
@@ -266,6 +381,24 @@ export default function ModelVersions() {
                       <h2>Loading models...</h2>
                     </div>
                     <p>Please wait.</p>
+                  </div>
+                </div>
+              </div>
+            ) : models.length === 0 ? (
+              <div className="model-card">
+                <div className="model-card-left">
+                  <div className="model-icon-box">
+                    <Cpu size={22} />
+                  </div>
+                  <div className="model-info">
+                    <div className="model-title-row">
+                      <h2>No models found</h2>
+                    </div>
+                    <p>
+                      Put each model inside backend/ml_assets/models in its own folder
+                      with both vectorizer.joblib and classifier.joblib, then press Add
+                      Model.
+                    </p>
                   </div>
                 </div>
               </div>

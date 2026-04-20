@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: paperscope-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+
+    # Run NLTK download before collectstatic — your analysis services need it.
+    # Your project already has backend/scripts/download_nltk_data.py for this.
+    buildCommand: >
+      pip install -r requirements.txt &&
+      python scripts/download_nltk_data.py &&
+      python manage.py collectstatic --noinput &&
+      python manage.py migrate --noinput
+
+    startCommand: >
+      gunicorn config.wsgi:application
+      --workers 2
+      --timeout 120
+      --bind 0.0.0.0:$PORT
+
+    # Non-secret config only. All secrets go in Render Dashboard → Environment.
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.prod
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: PYTHONUNBUFFERED
+        value: "1"

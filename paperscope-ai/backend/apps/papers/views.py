@@ -3,7 +3,6 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from rest_framework import status
@@ -42,19 +41,34 @@ class SubmitPDFView(APIView):
         uploaded_file = serializer.validated_data["file"]
         provided_title = (serializer.validated_data.get("title") or "").strip()
 
+        # FIX: Read pdf_bytes from the in-memory file object BEFORE calling
+        # default_storage.save(). When default_storage is Cloudinary (in
+        # production), save() uploads the file to Cloudinary and returns a
+        # Cloudinary URL — not a local filesystem path. The original code then
+        # tried to open that URL as a local path:
+        #
+        #   absolute_path = Path(settings.MEDIA_ROOT) / relative_path
+        #   pdf_bytes = absolute_path.read_bytes()   ← FileNotFoundError
+        #
+        # Reading from the upload object directly avoids that entirely.
+        # uploaded_file is an InMemoryUploadedFile or TemporaryUploadedFile —
+        # both support .read() and .seek() regardless of storage backend.
+        pdf_bytes = uploaded_file.read()
+        uploaded_file.seek(0)  # Reset so default_storage can read the file again
+
         relative_path = default_storage.save(
             f"papers/{uuid.uuid4().hex}_{uploaded_file.name}",
             uploaded_file,
         )
-        absolute_path = Path(settings.MEDIA_ROOT) / relative_path
-        pdf_bytes = absolute_path.read_bytes()
+        # relative_path is a local path in dev (FileSystemStorage) and a
+        # Cloudinary URL in production (MediaCloudinaryStorage). Either way it
+        # is safe to store in paper.pdf_file_path as a reference.
 
         filename_stem = Path(uploaded_file.name).stem
         extracted_title = extract_title_from_pdf_bytes(pdf_bytes)
 
-        # important:
-        # if old frontend sends filename stem as "auto-filled title",
-        # we still override it with the real PDF title
+        # If the old frontend sends the filename stem as an "auto-filled title",
+        # we still override it with the real PDF title extracted from the file.
         if not provided_title:
             final_title = extracted_title or filename_stem
         elif provided_title == filename_stem and extracted_title:

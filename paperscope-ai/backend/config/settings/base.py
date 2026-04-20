@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import cloudinary
 import environ
 
 # ---------------------------------------------------------
@@ -10,6 +11,19 @@ env = environ.Env(
     DJANGO_DEBUG=(bool, True),
 )
 environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
+
+# Cloudinary
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "")
+
+if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
+    cloudinary.config(
+        cloud_name=CLOUDINARY_CLOUD_NAME,
+        api_key=CLOUDINARY_API_KEY,
+        api_secret=CLOUDINARY_API_SECRET,
+        secure=True,
+    )
 
 # ---------------------------------------------------------
 # Core settings
@@ -83,6 +97,11 @@ TEMPLATES = [
 # ---------------------------------------------------------
 # Database
 # ---------------------------------------------------------
+db_options = {}
+db_sslmode = env("PGSSLMODE", default="")
+if db_sslmode:
+    db_options["sslmode"] = db_sslmode
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -91,6 +110,7 @@ DATABASES = {
         "PASSWORD": env("DB_PASSWORD"),
         "HOST": env("DB_HOST"),
         "PORT": env("DB_PORT"),
+        "OPTIONS": db_options,
     }
 }
 
@@ -118,12 +138,11 @@ REST_FRAMEWORK = {
 }
 
 REST_AUTH = {
-    'USE_JWT': True,
-    'JWT_AUTH_COOKIE': 'paperscope-auth',
-    'JWT_AUTH_REFRESH_COOKIE': 'paperscope-refresh-token',
-    'REGISTER_SERIALIZER': 'apps.users.serializers.CustomRegisterSerializer',
-    # <--- ADDED THIS: Tells Django to send role/is_superuser back to React --->
-    'USER_DETAILS_SERIALIZER': 'apps.users.serializers.UserSerializer', 
+    "USE_JWT": True,
+    "JWT_AUTH_COOKIE": "paperscope-auth",
+    "JWT_AUTH_REFRESH_COOKIE": "paperscope-refresh-token",
+    "REGISTER_SERIALIZER": "apps.users.serializers.CustomRegisterSerializer",
+    "USER_DETAILS_SERIALIZER": "apps.users.serializers.UserSerializer",
 }
 
 SIMPLE_JWT = {
@@ -134,7 +153,6 @@ SIMPLE_JWT = {
 # ---------------------------------------------------------
 # allauth
 # ---------------------------------------------------------
-# New-style settings
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "none"
@@ -144,7 +162,6 @@ ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_AUTHENTICATION_METHOD = "email"
 
-# <--- ADDED THESE TWO LINES: Allows Google to log into your local terminal-created Admin account --->
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
 

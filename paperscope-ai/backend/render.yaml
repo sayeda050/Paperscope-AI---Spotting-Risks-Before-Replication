@@ -2,24 +2,40 @@ services:
   - type: web
     name: paperscope-backend
     runtime: python
-    rootDir: backend
+
+    # ── ROOT DIRECTORY ─────────────────────────────────────────────────────────
+    # IMPORTANT: Check your GitHub repo root before using this file.
+    #
+    # Open your repo on GitHub. Look at what appears at the TOP level.
+    #
+    # If you see:  paperscope-ai/   README.md   .gitignore  at the root
+    #   → your rootDir is:  paperscope-ai/backend
+    #
+    # If you see:  backend/   frontend/   ml_pipeline/  at the root
+    #   → your rootDir is:  backend
+    #
+    # Change the line below to match your actual structure.
+    rootDir: paperscope-ai/backend
+
     plan: free
 
-    # Run NLTK download before collectstatic — your analysis services need it.
-    # Your project already has backend/scripts/download_nltk_data.py for this.
     buildCommand: >
-      pip install -r requirements.txt &&
-      python scripts/download_nltk_data.py &&
-      python manage.py collectstatic --noinput &&
-      python manage.py migrate --noinput
+      pip install -r requirements.txt && python scripts/download_nltk_data.py && python manage.py collectstatic --noinput && python manage.py migrate --noinput
 
+    # ── START COMMAND ──────────────────────────────────────────────────────────
+    # --workers is intentionally NOT set here (defaults to 1 worker).
+    # Why: your backend loads scikit-learn + numpy + scipy + PyMuPDF + pdfplumber
+    # + nltk at startup. Each gunicorn worker loads all of these independently.
+    # 2 workers × ~300 MB = ~600 MB, which exceeds Render free tier (512 MB)
+    # and causes an OOM kill loop. 1 worker uses ~300 MB and is stable.
     startCommand: >
-      gunicorn config.wsgi:application
-      --workers 2
-      --timeout 120
-      --bind 0.0.0.0:$PORT
+      gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --timeout 120
 
-    # Non-secret config only. All secrets go in Render Dashboard → Environment.
+
+
+    # Non-secret, non-sensitive config only.
+    # ALL secrets (SECRET_KEY, DATABASE_URL, passwords, API keys) go in
+    # Render Dashboard → Environment tab, never in this file.
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings.prod

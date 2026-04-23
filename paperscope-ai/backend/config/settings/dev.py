@@ -4,7 +4,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
-# Explicit local CORS/CSRF (same as base defaults, kept here for clarity)
+# Explicit local CORS/CSRF (aligned with local frontend dev server)
 CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://localhost:5173",
@@ -15,11 +15,14 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
 ]
 
-# Cookie settings for local dev (http is fine locally)
+# Cookie settings for local dev (plain HTTP is fine locally)
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
+
+# Override JWT cookie settings for local dev
+REST_AUTH = {**REST_AUTH, "JWT_AUTH_SECURE": False, "JWT_AUTH_SAMESITE": "Lax"}  # noqa: F405
 
 # --------------------------------------------------
 # Email (SMTP - Gmail) using certifi CA bundle
@@ -35,4 +38,4 @@ EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")          # noqa: F405
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")  # noqa: F405
 
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
-FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5173")  # noqa: F405
+FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5173").rstrip("/")  # noqa: F405

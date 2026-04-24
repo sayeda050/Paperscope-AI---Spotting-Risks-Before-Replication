@@ -5,6 +5,9 @@ import { submitPdfPaper, submitArxivPaper } from "../../api/papers.api.js";
 import { Upload, Link as LinkIcon, FileText, X } from "lucide-react";
 import "./SubmitPaper.css";
 
+const MAX_PDF_SIZE_MB = 10;
+const MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024;
+
 export default function SubmitPaper() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -33,9 +36,8 @@ export default function SubmitPaper() {
       return;
     }
 
-    const maxSize = 50 * 1024 * 1024;
-    if (file.size > maxSize) {
-      alert("File size must be 50MB or less.");
+    if (file.size > MAX_PDF_SIZE_BYTES) {
+      alert(`File size must be ${MAX_PDF_SIZE_MB}MB or less.`);
       return;
     }
 
@@ -70,6 +72,11 @@ export default function SubmitPaper() {
 
     if (!selectedFile) {
       alert("Please select a PDF file first.");
+      return;
+    }
+
+    if (selectedFile.size > MAX_PDF_SIZE_BYTES) {
+      alert(`File size must be ${MAX_PDF_SIZE_MB}MB or less.`);
       return;
     }
 
@@ -224,7 +231,9 @@ export default function SubmitPaper() {
           {activeTab === "pdf" ? (
             <div className="submit-card">
               <h2>Upload Research Paper</h2>
-              <p className="submit-card-subtitle">Supported format: PDF (max 50MB)</p>
+              <p className="submit-card-subtitle">
+                Supported format: PDF (max {MAX_PDF_SIZE_MB}MB)
+              </p>
 
               <form onSubmit={handlePdfSubmit} className="submit-form">
                 <label htmlFor="paperTitle">Paper Title (optional)</label>

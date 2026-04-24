@@ -30,6 +30,18 @@ from .services.pdf_extractor import (
 )
 
 
+MAX_PDF_SIZE_MB = 10
+MAX_PDF_SIZE_BYTES = MAX_PDF_SIZE_MB * 1024 * 1024
+
+
+def _pdf_size_error_message(source_label: str = "PDF") -> str:
+    return f"{source_label} is too large. Please use a PDF under {MAX_PDF_SIZE_MB}MB."
+
+
+def _bytes_size_mb(size_bytes: int) -> str:
+    return f"{size_bytes / (1024 * 1024):.2f}MB"
+
+
 class SubmitPDFView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
@@ -41,34 +53,47 @@ class SubmitPDFView(APIView):
         uploaded_file = serializer.validated_data["file"]
         provided_title = (serializer.validated_data.get("title") or "").strip()
 
-        # FIX: Read pdf_bytes from the in-memory file object BEFORE calling
-        # default_storage.save(). When default_storage is Cloudinary (in
-        # production), save() uploads the file to Cloudinary and returns a
-        # Cloudinary URL — not a local filesystem path. The original code then
-        # tried to open that URL as a local path:
-        #
-        #   absolute_path = Path(settings.MEDIA_ROOT) / relative_path
-        #   pdf_bytes = absolute_path.read_bytes()   ← FileNotFoundError
-        #
-        # Reading from the upload object directly avoids that entirely.
-        # uploaded_file is an InMemoryUploadedFile or TemporaryUploadedFile —
-        # both support .read() and .seek() regardless of storage backend.
+        # Read pdf_bytes from the in-memory file object BEFORE calling
+        # default_storage.save(). When default_storage is Cloudinary in production,
+        # save() uploads the file remotely and returns a Cloudinary reference.
+        # Reading from the upload object directly keeps the existing workflow safe
+        # for both local FileSystemStorage and Cloudinary storage.
         pdf_bytes = uploaded_file.read()
-        uploaded_file.seek(0)  # Reset so default_storage can read the file again
+        uploaded_file.seek(0)
 
-        relative_path = default_storage.save(
-            f"papers/{uuid.uuid4().hex}_{uploaded_file.name}",
-            uploaded_file,
-        )
-        # relative_path is a local path in dev (FileSystemStorage) and a
-        # Cloudinary URL in production (MediaCloudinaryStorage). Either way it
-        # is safe to store in paper.pdf_file_path as a reference.
+        if len(pdf_bytes) > MAX_PDF_SIZE_BYTES:
+            detail = (
+                f"PDF is too large. Got {_bytes_size_mb(len(pdf_bytes))}. "
+                f"Maximum allowed size is {MAX_PDF_SIZE_MB}MB."
+            )
+            log_error(
+                module_name="papers.submit_pdf",
+                message=detail,
+                user=request.user,
+            )
+            return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            relative_path = default_storage.save(
+                f"papers/{uuid.uuid4().hex}_{uploaded_file.name}",
+                uploaded_file,
+            )
+        except Exception as exc:
+            log_error(
+                module_name="papers.submit_pdf.storage",
+                message=str(exc),
+                user=request.user,
+            )
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         filename_stem = Path(uploaded_file.name).stem
         extracted_title = extract_title_from_pdf_bytes(pdf_bytes)
 
         # If the old frontend sends the filename stem as an "auto-filled title",
-        # we still override it with the real PDF title extracted from the file.
+        # still override it with the real PDF title extracted from the file.
         if not provided_title:
             final_title = extracted_title or filename_stem
         elif provided_title == filename_stem and extracted_title:
@@ -124,12 +149,37 @@ class SubmitArxivView(APIView):
 
         try:
             paper_data = ArxivClient().fetch(arxiv_id)
+
+            pdf_size = len(paper_data.pdf_bytes or b"")
+            if pdf_size > MAX_PDF_SIZE_BYTES:
+                detail = (
+                    f"arXiv PDF is too large. Got {_bytes_size_mb(pdf_size)}. "
+                    f"Maximum allowed size is {MAX_PDF_SIZE_MB}MB."
+                )
+                log_error(
+                    module_name="papers.submit_arxiv",
+                    message=detail,
+                    user=request.user,
+                )
+                return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
+
             title = provided_title or paper_data.title
 
-            relative_path = default_storage.save(
-                f"papers/{uuid.uuid4().hex}_{arxiv_id}.pdf",
-                ContentFile(paper_data.pdf_bytes),
-            )
+            try:
+                relative_path = default_storage.save(
+                    f"papers/{uuid.uuid4().hex}_{arxiv_id}.pdf",
+                    ContentFile(paper_data.pdf_bytes),
+                )
+            except Exception as exc:
+                log_error(
+                    module_name="papers.submit_arxiv.storage",
+                    message=str(exc),
+                    user=request.user,
+                )
+                return Response(
+                    {"detail": str(exc)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             paper = Paper.objects.create(
                 user=request.user,

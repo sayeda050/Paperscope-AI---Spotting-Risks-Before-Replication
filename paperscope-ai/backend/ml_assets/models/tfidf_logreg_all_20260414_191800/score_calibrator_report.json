@@ -1,0 +1,67 @@
+{
+  "schema_version": "2.0",
+  "run_id": "20260414_191800",
+  "domain": "all",
+  "gold_rows_total": 700,
+  "train_val_rows": 595,
+  "holdout_rows": 105,
+  "selected_model": "rf_400",
+  "feature_count": 29,
+  "new_features_added": [
+    "rubric_score",
+    "llm_label_binary"
+  ],
+  "cv_results": {
+    "rf_400": {
+      "cv_mae_per_fold": [
+        10.93576720328283,
+        9.166223007605819,
+        9.650451513938908,
+        9.654285202203633,
+        11.344902436899256
+      ],
+      "cv_mae_mean": 10.15032587278609
+    },
+    "rf_600_d12": {
+      "cv_mae_per_fold": [
+        10.95804124443018,
+        9.127608439456248,
+        9.71447235951847,
+        9.6914419635087,
+        11.277126369994305
+      ],
+      "cv_mae_mean": 10.15373807538158
+    },
+    "gbr_250_lr005": {
+      "cv_mae_per_fold": [
+        10.926144536290622,
+        9.284295706046953,
+        10.472675210511955,
+        10.331757417454797,
+        10.564655626394398
+      ],
+      "cv_mae_mean": 10.315905699339746
+    },
+    "gbr_400_lr003": {
+      "cv_mae_per_fold": [
+        11.058544647016538,
+        9.242569530367374,
+        10.53909897998592,
+        10.217404621286814,
+        10.726922038806153
+      ],
+      "cv_mae_mean": 10.35690796349256
+    }
+  },
+  "holdout_metrics": {
+    "mae": 9.311035496910497,
+    "rmse": 11.773406510489918,
+    "spearman": 0.826082354626853,
+    "band_accuracy": 0.6190476190476191
+  },
+  "artifacts": {
+    "score_calibrator": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\all\\20260414_191800\\score_calibrator.joblib",
+    "score_feature_columns": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\all\\20260414_191800\\score_feature_columns.json",
+    "holdout_predictions": "E:\\PAPERSCOPE AI\\paperscope-ai\\ml_pipeline\\outputs\\models\\all\\20260414_191800\\score_calibrator_holdout.csv"
+  }
+}

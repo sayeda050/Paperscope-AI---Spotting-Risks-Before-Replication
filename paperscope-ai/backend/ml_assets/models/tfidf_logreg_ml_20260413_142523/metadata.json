@@ -1,0 +1,51 @@
+{
+  "schema_version": "2.0",
+  "run_id": "20260413_142523",
+  "domain": "ml",
+  "model_name": "tfidf_logreg_ml_20260413_142523",
+  "vectorizer_type": "TfidfVectorizer",
+  "classifier_type": "LogisticRegression+IsotonicCalibration",
+  "input_text_column": "train_text_input",
+  "target_column": "repro_label",
+  "feature_engineering": "tfidf_bigrams_plus_attribute_features_plus_domain_onehot_v3",
+  "explicit_feature_names": [
+    "code_artifact",
+    "data_artifact",
+    "availability_statement",
+    "execution_instructions",
+    "hyperparams_detail",
+    "seed_disclosed",
+    "compute_detail",
+    "software_versions",
+    "evaluation_protocol",
+    "ablation",
+    "baseline_comparison",
+    "statistical_rigor",
+    "limitations"
+  ],
+  "domain_onehot_features": [
+    "dom_ml",
+    "dom_physics",
+    "dom_biomed",
+    "dom_nlp",
+    "dom_finance",
+    "dom_hardware",
+    "dom_math"
+  ],
+  "selected_hyperparameters": {
+    "C": 0.05,
+    "class_weight": "None"
+  },
+  "calibration": "isotonic",
+  "train_rows": 429,
+  "val_rows": 92,
+  "test_rows": 93,
+  "class_names": [
+    "NO",
+    "YES"
+  ],
+  "known_classes": [
+    "NO",
+    "YES"
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "model_name": "tfidf_logreg_auto_v2",
+  "vectorizer_type": "TfidfVectorizer",
+  "classifier_type": "LogisticRegression",
+  "input_text": "model_text_only",
+  "target_column": "repro_label",
+  "feature_engineering": "tfidf_bigrams_plus_content_keyword_flags_v1",
+  "keyword_flag_names": [
+    "kw_code_link",
+    "kw_data_link",
+    "kw_hyperparams",
+    "kw_seed",
+    "kw_uncertainty",
+    "kw_compute",
+    "kw_ablation",
+    "kw_baselines",
+    "kw_limitations",
+    "kw_stat_tests"
+  ],
+  "selected_hyperparameters": {
+    "C": 0.05,
+    "class_weight": null
+  },
+  "train_rows": 322,
+  "val_rows": 69,
+  "test_rows": 70,
+  "train_plus_val_rows": 391,
+  "label_classes": [
+    "NO",
+    "YES"
+  ],
+  "vectorizer_params": {
+    "analyzer": "word",
+    "binary": false,
+    "decode_error": "strict",
+    "dtype": "<class 'numpy.float64'>",
+    "encoding": "utf-8",
+    "input": "content",
+    "lowercase": true,
+    "max_df": 0.95,
+    "max_features": 80000,
+    "min_df": 2,
+    "ngram_range": [
+      1,
+      2
+    ],
+    "norm": "l2",
+    "preprocessor": null,
+    "smooth_idf": true,
+    "stop_words": null,
+    "strip_accents": "unicode",
+    "sublinear_tf": true,
+    "token_pattern": "(?u)\\b\\w\\w+\\b",
+    "tokenizer": null,
+    "use_idf": true,
+    "vocabulary": null
+  },
+  "classifier_params": {
+    "C": 0.05,
+    "class_weight": null,
+    "dual": false,
+    "fit_intercept": true,
+    "intercept_scaling": 1,
+    "l1_ratio": 0.0,
+    "max_iter": 5000,
+    "n_jobs": null,
+    "penalty": "deprecated",
+    "random_state": 42,
+    "solver": "lbfgs",
+    "tol": 0.0001,
+    "verbose": 0,
+    "warm_start": false
+  }
+}

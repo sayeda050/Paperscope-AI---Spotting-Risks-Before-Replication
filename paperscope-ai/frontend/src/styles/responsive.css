@@ -1,0 +1,398 @@
+/* ============================================================
+   PaperScope AI — Global Responsive + Interactive CSS
+   Loaded globally via main.jsx.
+   Works across ALL dashboard pages via shared class names.
+   DO NOT rename the classes — they match page JSX exactly.
+   ============================================================ */
+
+/* ── Loading Screen (Dashboard.jsx + AdminDashboard.jsx) ─────────── */
+.ps-loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #f8fafc;
+  color: #64748b;
+  gap: 16px;
+  font-family: 'Inter', sans-serif;
+}
+
+.ps-loading-screen p {
+  margin: 0;
+  font-size: 15px;
+}
+
+.ps-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #0f766e;
+  border-radius: 50%;
+  animation: ps-spin 0.75s linear infinite;
+}
+
+@keyframes ps-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Table scroll wrapper (AnalysisJobs.jsx) ─────────────────────── */
+.ps-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Hamburger button — hidden on desktop, injected via App.jsx ──── */
+.ps-hamburger-btn {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 600;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+  transition: background 0.2s ease, transform 0.15s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.ps-hamburger-btn:hover {
+  background: #1e293b;
+  transform: scale(1.04);
+}
+
+.ps-hamburger-btn:active {
+  transform: scale(0.97);
+}
+
+/* ── Dark overlay behind open sidebar on mobile/tablet ───────────── */
+.ps-sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.52);
+  z-index: 590;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  cursor: pointer;
+}
+
+/* ── Tablet + Phone  (< 1024px) ─────────────────────────────────── */
+@media (max-width: 1023px) {
+
+  /* Lock horizontal scroll — prevents the off-screen sidebar from
+     creating a scrollable area that exposes the dark sidebar bg.    */
+  html,
+  body {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+  }
+
+  .ps-dashboard-layout,
+  .ps-app {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+  }
+
+  .ps-hamburger-btn {
+    display: flex;
+  }
+
+  /* Sidebar becomes a fixed slide-in overlay panel.
+     Uses transform (not left) so it does NOT contribute to scroll width. */
+  .ps-sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    transform: translateX(-100%) !important;
+    height: 100vh !important;
+    z-index: 595 !important;
+    transition: transform 0.27s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    overflow-y: auto;
+    width: 260px !important;
+    box-sizing: border-box !important;
+    will-change: transform;
+  }
+
+  body.ps-sidebar-open .ps-sidebar {
+    transform: translateX(0) !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35);
+  }
+
+  body.ps-sidebar-open .ps-sidebar-overlay {
+    display: block;
+  }
+
+  /* Main content takes full width — sidebar is out of flex flow when fixed */
+  .ps-app > .ps-main,
+  .ps-dashboard-layout > .ps-main-content,
+  .ps-main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Top bars: add left padding to clear the 42px hamburger at left:12px */
+  .ps-top-bar,
+  .ps-topbar {
+    padding-left: 68px !important;
+  }
+
+  /* Page container tighter padding on tablet */
+  .ps-page-container {
+    padding: 20px !important;
+    max-width: 100% !important;
+  }
+
+  .ps-content {
+    padding: 20px !important;
+    max-width: 100% !important;
+  }
+
+  /* Table minimum width so it scrolls horizontally */
+  .ps-table {
+    min-width: 580px;
+  }
+
+  /* Stats: 2 columns on tablet */
+  .ps-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Charts: stack on tablet portrait */
+  .ps-charts-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Analysis result grids: stack */
+  .ps-grid-3,
+  .ps-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .ps-col-2 {
+    grid-column: span 1 !important;
+  }
+
+  /* Page header row: allow wrap when Refresh button can't fit */
+  .ps-page-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  /* History card: allow wrap so badges never push content past viewport */
+  .ps-history-card {
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+  }
+
+  .ps-history-info {
+    min-width: 0 !important;
+    width: 100% !important;
+    padding-right: 0 !important;
+  }
+
+  .ps-history-actions {
+    flex-wrap: wrap !important;
+  }
+
+  /* Submit paper container & form: never exceed viewport */
+  .submit-paper-scope,
+  .submit-card,
+  .submit-form,
+  .upload-dropzone {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
+
+/* ── Phone  (< 640px) ───────────────────────────────────────────── */
+@media (max-width: 639px) {
+
+  .ps-stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .ps-actions-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .ps-filter-bar {
+    flex-direction: column !important;
+  }
+
+  .ps-search-wrapper {
+    min-width: 100% !important;
+  }
+
+  .ps-select {
+    width: 100% !important;
+  }
+
+  .ps-history-card {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+
+  .ps-history-actions {
+    width: 100% !important;
+    justify-content: flex-start !important;
+    flex-wrap: wrap !important;
+  }
+
+  .ps-page-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  .ps-page-container {
+    padding: 14px !important;
+  }
+
+  .ps-content {
+    padding: 14px !important;
+  }
+
+  .ps-status-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .submit-paper-tabs {
+    width: 100% !important;
+    display: flex !important;
+  }
+
+  .submit-tab {
+    flex: 1 !important;
+    justify-content: center !important;
+  }
+
+  .submit-analysis-btn {
+    align-self: stretch !important;
+    width: 100% !important;
+  }
+
+  /* Register form first+last name: single column on phone */
+  .ps-register-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Landing hero */
+  .ps-hero-title {
+    font-size: 32px !important;
+  }
+
+  /* Mock dashboard stats: single column */
+  .ps-mock-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Job row right side: allow badge wrap */
+  .ps-job-right {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+}
+
+/* ── Touch-friendly (all touchscreen devices) ───────────────────── */
+@media (hover: none) and (pointer: coarse) {
+
+  /* Minimum 48px nav links */
+  .ps-nav-link {
+    padding: 14px 12px !important;
+    min-height: 48px !important;
+  }
+
+  .ps-btn-logout {
+    padding: 14px 8px !important;
+    min-height: 48px !important;
+  }
+
+  .submit-analysis-btn {
+    height: 50px !important;
+    font-size: 15px !important;
+  }
+
+  .submit-tab {
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+
+  /* 16px font prevents iOS auto-zoom on input focus */
+  .ps-input,
+  .submit-form input,
+  .forgot-form input,
+  .reset-input-group input {
+    height: 48px !important;
+    font-size: 16px !important;
+  }
+
+  .ps-select {
+    height: 44px !important;
+    font-size: 16px !important;
+  }
+
+  /* Remove hover-only transforms on touch — use :active instead */
+  .ps-feature-card:hover,
+  .ps-history-card:hover,
+  .ps-action-card:hover,
+  .ps-card-shine:hover {
+    transform: none !important;
+    box-shadow: inherit !important;
+  }
+
+  .ps-action-card:active {
+    transform: translateY(-1px) !important;
+  }
+}
+
+/* ── Desktop  (>= 1024px) — hamburger never shows ───────────────── */
+@media (min-width: 1024px) {
+  .ps-hamburger-btn {
+    display: none !important;
+  }
+
+  .ps-sidebar-overlay {
+    display: none !important;
+  }
+}
+
+/* ── Tablet landscape  (768–1023px) ─────────────────────────────── */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .ps-hero-title {
+    font-size: 44px !important;
+  }
+
+  .ps-features-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ── Smooth scroll globally ─────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── Safe area insets (notched phones in Capacitor / PWA) ───────── */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .ps-sidebar {
+    padding-top: max(24px, calc(24px + env(safe-area-inset-top)));
+  }
+
+  .ps-top-bar,
+  .ps-topbar {
+    height: calc(64px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
+}

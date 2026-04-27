@@ -1,0 +1,21 @@
+{
+  "schema_version": "2.0",
+  "updated_at": "2026-04-18T05:57:23.830626+00:00",
+  "models": [
+    {
+      "id": "tfidf_logreg_all_20260416_024522",
+      "domain": "all",
+      "run_id": "20260416_024522",
+      "exported_at": "2026-04-18T05:57:23.830030+00:00"
+    }
+  ],
+  "domains": {
+    "all": {
+      "active_model_id": "tfidf_logreg_all_20260416_024522",
+      "model_path": "C:\\Users\\Admin\\Downloads\\PaperScope AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_all_20260416_024522"
+    }
+  },
+  "active_model": "tfidf_logreg_all_20260416_024522",
+  "activeModelId": "tfidf_logreg_all_20260416_024522",
+  "model_path": "C:\\Users\\Admin\\Downloads\\PaperScope AI\\paperscope-ai\\backend\\ml_assets\\models\\tfidf_logreg_all_20260416_024522"
+}
